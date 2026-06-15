@@ -16,6 +16,7 @@
       ],
       "js": [
         "src/content/conversationScanner.js",
+        "src/content/viewManagerStrings.js",
         "src/content/viewManagerIcons.js",
         "src/content/viewManagerIconButtonFactory.js",
         "src/content/viewManagerActionsDropdown.js",

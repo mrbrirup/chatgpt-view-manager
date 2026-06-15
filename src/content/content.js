@@ -57,12 +57,57 @@
      *         title: string,
      *         onClick: (event: MouseEvent) => void
      *     }) => HTMLButtonElement,
+     *     strings: {
+     *         get: (key: string) => string
+     *     },
      *     onImport: () => void | Promise<void>,
      *     onExport: () => void | Promise<void>,
      *     onSetTheme: (theme: "auto" | "dark" | "light") => void | Promise<void>,
      *     getCurrentTheme: () => "auto" | "dark" | "light"
      * }) => ViewManagerActionsDropdown} ViewManagerActionsDropdownConstructor
      */
+
+
+
+    /**
+     * @typedef {{ get: (key: string) => string, format: (key: string, ...values: Array<string | number>) => string }} ViewManagerStringsType
+     */
+
+    /**
+     * Gets the ViewManagerStrings registry.
+     *
+     * @returns {ViewManagerStringsType}
+     */
+    const getViewManagerStrings = () => {
+        console.log("getViewManagerStrings called")
+        const viewManagerStrings = window.MrbrCvm?.ViewManagerStrings;
+
+        if (!viewManagerStrings) {
+            throw new Error("ChatGPT View Manager failed to load ViewManagerStrings.");
+        }
+
+        return viewManagerStrings;
+    };
+    console.log("getViewManagerStrings calling")
+    const ViewManagerStrings = getViewManagerStrings();
+
+
+    /**
+     * Gets the ConversationScanner constructor loaded by conversationScanner.js.
+     *
+     * @returns {ConversationScannerConstructor}
+     */
+    const getConversationScannerConstructor = () => {
+        const conversationScanner = window.MrbrCvm?.ConversationScanner;
+
+        if (!conversationScanner) {
+            throw new Error(ViewManagerStrings.get("conversationScannerLoadFailed"));
+        }
+
+        return conversationScanner;
+    };
+
+    const ConversationScanner = getConversationScannerConstructor();
 
     /**
      * @typedef {new () => ViewManagerIconButtonFactory} ViewManagerIconButtonFactoryConstructor
@@ -77,7 +122,7 @@
         const iconButtonFactory = window.MrbrCvm?.ViewManagerIconButtonFactory;
 
         if (!iconButtonFactory) {
-            throw new Error("ChatGPT View Manager failed to load ViewManagerIconButtonFactory.");
+            throw new Error(ViewManagerStrings.get("iconFactoryLoadFailed"));
         }
 
         return iconButtonFactory;
@@ -85,22 +130,7 @@
 
     const ViewManagerIconButtonFactory = getIconButtonFactoryConstructor();
 
-    /**
-     * Gets the ConversationScanner constructor loaded by conversationScanner.js.
-     *
-     * @returns {ConversationScannerConstructor}
-     */
-    const getConversationScannerConstructor = () => {
-        const conversationScanner = window.MrbrCvm?.ConversationScanner;
 
-        if (!conversationScanner) {
-            throw new Error("ChatGPT View Manager failed to load ConversationScanner.");
-        }
-
-        return conversationScanner;
-    };
-
-    const ConversationScanner = getConversationScannerConstructor();
 
 
 
@@ -113,7 +143,7 @@
         const actionsDropdown = window.MrbrCvm?.ViewManagerActionsDropdown;
 
         if (!actionsDropdown) {
-            throw new Error("ChatGPT View Manager failed to load ViewManagerActionsDropdown.");
+            throw new Error(ViewManagerStrings.get("actionsDropdownLoadFailed"));
         }
 
         return actionsDropdown;
@@ -123,8 +153,12 @@
 
 
     if (!ConversationScanner) {
-        throw new Error("ChatGPT View Manager failed to load ConversationScanner.");
+        throw new Error(ViewManagerStrings.get("conversationScannerLoadFailed"));
     }
+
+
+
+
 
     const MrbrChatGptViewManager = class {
         static PANEL_ID = "mrbr-cvm-panel";
@@ -503,7 +537,7 @@
             const block = this.findBestVisibleBlock();
 
             if (!block) {
-                alert("No visible conversation block was found.");
+                alert(this.getString("noVisibleConversationBlockFound"));
                 return;
             }
 
@@ -511,7 +545,7 @@
                 title = this.scanner.getBlockTitle(block);
 
             if (!identity.blockKey) {
-                alert("The selected block does not have a valid block key.");
+                alert(this.getString("selectedBlockInvalidKey"));
                 return;
             }
 
@@ -561,7 +595,7 @@
                     titleElement = document.createElement("h2"),
                     collapsePanelButton = this.createIconButton({
                         iconName: "collapsePanel",
-                        title: "Collapse View Manager",
+                        title: this.getString("collapseViewManager"),
                         onClick: () => {
                             this.togglePanelCollapsed();
                         }
@@ -575,12 +609,12 @@
                 headerElement.className = "mrbr-cvm-header";
 
                 titleElement.className = "mrbr-cvm-header-title";
-                titleElement.textContent = "View Manager";
+                titleElement.textContent = this.getString("viewManagerTitle");
 
                 headerElement.append(titleElement, collapsePanelButton);
 
                 statusElement.className = "mrbr-cvm-status";
-                statusElement.textContent = `${blocks.length} blocks detected`;
+                statusElement.textContent = this.formatString("blocksDetected", blocks.length);
 
                 this.panelElement.append(
                     headerElement,
@@ -607,7 +641,7 @@
                 const emptyElement = document.createElement("div");
 
                 emptyElement.className = "mrbr-cvm-empty-section";
-                emptyElement.textContent = "No collapsed blocks.";
+                emptyElement.textContent = this.getString("noCollapsedBlocks");
 
                 listElement.append(emptyElement);
             } else {
@@ -616,7 +650,7 @@
                 }
             }
 
-            return this.createCompactSectionElement("Collapsed Blocks", this.state.collapsedBlocks.length, listElement);
+            return this.createCompactSectionElement(this.getString("collapsedBlocksSectionTitle"), this.state.collapsedBlocks.length, listElement);
         }
         /**
         * Creates one compact collapsed block management row.
@@ -628,21 +662,21 @@
             const rowElement = document.createElement("div"),
                 goButton = this.createIconButton({
                     iconName: "go",
-                    title: "Go to collapsed block placeholder",
+                    title: this.getString("goToCollapsedBlockPlaceholder"),
                     onClick: () => {
                         this.goToCollapsedBlock(collapsedBlock);
                     }
                 }),
                 restoreButton = this.createIconButton({
                     iconName: "restore",
-                    title: "Restore collapsed block",
+                    title: this.getString("restoreCollapsedBlock"),
                     onClick: async () => {
                         await this.restoreCollapsedBlock(collapsedBlock);
                     }
                 }),
                 forgetButton = this.createIconButton({
                     iconName: "delete",
-                    title: "Forget collapsed block and restore it",
+                    title: this.getString("forgetCollapsedBlockAndRestore"),
                     onClick: async () => {
                         await this.forgetCollapsedBlock(collapsedBlock);
                     }
@@ -673,7 +707,7 @@
                 target = placeholder || block;
 
             if (!target) {
-                alert(`Could not find collapsed block "${collapsedBlock.title}". Try rescanning after the page has fully loaded.`);
+                alert(this.formatString("couldNotFindCollapsedBlock", collapsedBlock.title));
                 return;
             }
 
@@ -734,7 +768,7 @@
                 const emptyElement = document.createElement("div");
 
                 emptyElement.className = "mrbr-cvm-empty-section";
-                emptyElement.textContent = "No bookmarks yet.";
+                emptyElement.textContent = this.getString("noBookmarksYet");
 
                 listElement.append(emptyElement);
             } else {
@@ -743,7 +777,7 @@
                 }
             }
 
-            return this.createCompactSectionElement("Bookmarks", this.state.bookmarks.length, listElement);
+            return this.createCompactSectionElement(this.getString("bookmarksSectionTitle"), this.state.bookmarks.length, listElement);
         }
 
         /**
@@ -761,6 +795,9 @@
                     title: options.title,
                     onClick: options.onClick
                 }),
+                strings: {
+                    get: key => this.getString(key)
+                },
                 onExport: () => {
                     this.exportState();
                 },
@@ -779,14 +816,14 @@
             actionGroupElement.append(
                 this.createIconButton({
                     iconName: "bookmark",
-                    title: "Bookmark visible block",
+                    title: this.getString("bookmarkVisibleBlock"),
                     onClick: () => {
                         this.addBookmarkForVisibleBlock();
                     }
                 }),
                 this.createIconButton({
                     iconName: "collapse",
-                    title: "Collapse highlighted block",
+                    title: this.getString("collapseHighlightedBlock"),
                     onMouseEnter: () => {
                         this.highlightCollapseTarget();
                     },
@@ -799,14 +836,14 @@
                 }),
                 this.createIconButton({
                     iconName: "restore",
-                    title: "Restore all collapsed blocks",
+                    title: this.getString("restoreAllCollapsedBlocks"),
                     onClick: () => {
                         this.restoreAllBlocks();
                     }
                 }),
                 this.createIconButton({
                     iconName: "rescan",
-                    title: "Rescan conversation blocks",
+                    title: this.getString("rescanConversationBlocks"),
                     onClick: () => {
                         this.scheduleDomUpdate(() => {
                             const rescannedBlocks = this.scanner.findBlocks();
@@ -818,7 +855,7 @@
                 }),
                 this.createIconButton({
                     iconName: "top",
-                    title: "Scroll to top",
+                    title: this.getString("scrollToTop"),
                     onClick: () => {
                         window.scrollTo({
                             top: 0,
@@ -842,7 +879,7 @@
             await this.saveState();
 
             const exportData = {
-                exportedBy: "ChatGPT View Manager",
+                exportedBy: this.getString("exportedBy"),
                 exportedUtc: new Date().toISOString(),
                 storageKey: MrbrChatGptViewManager.STORAGE_KEY,
                 activeConversationKey: this.conversationKey,
@@ -921,22 +958,19 @@
             try {
                 parsed = JSON.parse(jsonText);
             } catch (error) {
-                alert("Import failed. The selected file is not valid JSON.");
-                console.error("View Manager import JSON parse failed.", error);
+                alert(this.getString("importFailedInvalidJson"));
+                console.error(this.getString("importJsonParseFailed"), error);
                 return;
             }
 
             const importedRoot = parsed?.data || parsed;
 
             if (!this.isValidStorageRoot(importedRoot)) {
-                alert("Import failed. The selected file does not contain valid View Manager data.");
+                alert(this.getString("importFailedInvalidData"));
                 return;
             }
 
-            const shouldImport = confirm(
-                "Import View Manager data?\n\n" +
-                "This will replace your current View Manager bookmarks, collapsed blocks, and UI settings."
-            );
+            const shouldImport = confirm(this.getString("importConfirmMessage"));
 
             if (!shouldImport) {
                 return;
@@ -956,7 +990,7 @@
                 this.render();
             });
 
-            alert("View Manager data imported successfully.");
+            alert(this.getString("importSuccessMessage"));
         }
 
         /**
@@ -984,7 +1018,7 @@
                     try {
                         resolve(await file.text());
                     } catch (error) {
-                        console.error("Failed to read import file.", error);
+                        console.error(this.getString("importFileReadFailed"), error);
                         resolve(null);
                     }
                 });
@@ -1011,7 +1045,7 @@
                 .toISOString()
                 .replace(/[:.]/g, "-");
 
-            return `chatgpt-view-manager-${timestamp}.json`;
+            return `${this.getString("exportFilePrefix")}-${timestamp}.json`;
         }
         /**
          * Creates one compact theme toggle icon button.
@@ -1056,14 +1090,14 @@
             const rowElement = document.createElement("div"),
                 goButton = this.createIconButton({
                     iconName: "go",
-                    title: "Go to bookmark",
+                    title: this.getString("goToBookmark"),
                     onClick: () => {
                         this.goToBookmark(bookmark);
                     }
                 }),
                 deleteButton = this.createIconButton({
                     iconName: "delete",
-                    title: "Delete bookmark",
+                    title: this.getString("deleteBookmark"),
                     onClick: async () => {
                         this.state.bookmarks = this.state.bookmarks.filter(item => item.id !== bookmark.id);
 
@@ -1103,8 +1137,8 @@
             const identity = this.scanner.getBlockIdentity(block),
                 defaultTitle = this.scanner.getBlockTitle(block),
                 title = await this.showTextInputDialog({
-                    title: "Add bookmark",
-                    label: "Bookmark title",
+                    title: this.getString("addBookmarkTitle"),
+                    label: this.getString("bookmarkTitleLabel"),
                     value: defaultTitle
                 });
 
@@ -1141,7 +1175,7 @@
             const block = this.scanner.findBlockForBookmark(bookmark);
 
             if (!block) {
-                alert(`Could not find bookmark "${bookmark.title}". Try rescanning after the page has fully loaded.`);
+                alert(this.formatString("couldNotFindBookmark", bookmark.title));
                 return;
             }
 
@@ -1307,7 +1341,7 @@
             const block = this.pendingCollapseBlock || this.findBestVisibleBlock();
 
             if (!block) {
-                alert("No highlighted conversation block was found.");
+                alert(this.getString("noHighlightedConversationBlockFound"));
                 return;
             }
 
@@ -1414,13 +1448,13 @@
 
             titleElement.className = "mrbr-cvm-collapsed-title";
             titleElement.title = collapsedBlock.title;
-            titleElement.textContent = `Collapsed: ${collapsedBlock.title}`;
+            titleElement.textContent = this.formatString("collapsedPrefix", collapsedBlock.title);
 
             metaElement.className = "mrbr-cvm-collapsed-meta";
             metaElement.textContent = collapsedBlock.blockKey;
 
             restoreButton.type = "button";
-            restoreButton.textContent = "Restore";
+            restoreButton.textContent = this.getString("restoreCollapsedBlock");
             restoreButton.addEventListener("click", async () => {
                 await this.restoreCollapsedBlock(collapsedBlock);
             });
@@ -1538,7 +1572,7 @@
                     try {
                         pendingCallback();
                     } catch (error) {
-                        console.error("ChatGPT View Manager DOM update failed.", error);
+                        console.error(this.getString("domUpdateFailed"), error);
                     }
                 }
             });
@@ -1577,7 +1611,7 @@
             const statusElement = this.panelElement.querySelector(".mrbr-cvm-status");
 
             if (statusElement) {
-                statusElement.textContent = `${blockCount} blocks detected`;
+                statusElement.textContent = this.formatString("blocksDetected", blockCount);
             }
         }
         /**
@@ -1663,13 +1697,13 @@
                 actionsElement.className = "mrbr-cvm-dialog-actions";
 
                 cancelButton.type = "button";
-                cancelButton.textContent = "Cancel";
+                cancelButton.textContent = this.getString("cancel");
                 cancelButton.addEventListener("click", () => {
                     closeDialog(null);
                 });
 
                 saveButton.type = "button";
-                saveButton.textContent = "Save bookmark";
+                saveButton.textContent = this.getString("saveBookmark");
                 saveButton.addEventListener("click", () => {
                     closeDialog(inputElement.value.trim());
                 });
@@ -1766,7 +1800,7 @@
 
             const expandButton = this.createIconButton({
                 iconName: "expandPanel",
-                title: "Expand View Manager",
+                title: this.getString("expandViewManager"),
                 onClick: () => {
                     this.togglePanelCollapsed();
                 }
@@ -1774,6 +1808,39 @@
 
             this.panelElement.append(expandButton);
         }
+        /**
+         * Gets a UI string.
+         *
+         * @param {string} key
+         * @returns {string}
+         */
+        getString(key) {
+            return ViewManagerStrings.get(key);
+        }
+
+        /**
+         * Formats a UI string.
+         *
+         * @param {string} key
+         * @param {...string | number} values
+         * @returns {string}
+         */
+        formatString(key, ...values) {
+            const strings = window.MrbrCvm?.ViewManagerStrings;
+
+            if (strings) {
+                return strings.format(key, ...values);
+            }
+
+            let text = key;
+
+            values.forEach((value, index) => {
+                text = text.replaceAll(`{${index}}`, String(value));
+            });
+
+            return text;
+        }
+
     };
 
 
@@ -1781,7 +1848,7 @@
     const manager = new MrbrChatGptViewManager();
 
     manager.start().catch(error => {
-        console.error("ChatGPT View Manager failed to start.", error);
+        console.error(ViewManagerStrings.get("startupFailed"), error);
     });
 })();
 

@@ -16,6 +16,7 @@ declare global {
             ViewManagerActionsDropdown?: typeof ViewManagerActionsDropdown;
             ViewManagerIcons?: typeof ViewManagerIcons;
             ViewManagerIconButtonFactory?: typeof ViewManagerIconButtonFactory;
+            ViewManagerStrings?: typeof ViewManagerStrings;
         };
     }
 
@@ -52,6 +53,9 @@ declare global {
                 title: string;
                 onClick: (event: MouseEvent) => void;
             }) => HTMLButtonElement;
+            strings: {
+                get: (key: string) => string;
+            };
             onImport: () => void | Promise<void>;
             onExport: () => void | Promise<void>;
             onSetTheme: (theme: "auto" | "dark" | "light") => void | Promise<void>;
@@ -78,5 +82,9 @@ declare global {
         }): HTMLButtonElement;
     }
 
+    class ViewManagerStrings {
+        static get(key: string): string;
+        static format(key: string, ...values: Array<string | number>): string;
+    }
 
 }

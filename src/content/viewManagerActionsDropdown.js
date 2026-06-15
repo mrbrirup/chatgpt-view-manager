@@ -4,24 +4,33 @@
     window.MrbrCvm = window.MrbrCvm || {};
 
     /**
+     * @typedef {{
+     *     createIconButton: (options: {
+     *         iconName: string,
+     *         title: string,
+     *         onClick: (event: MouseEvent) => void
+     *     }) => HTMLButtonElement,
+     *     strings: {
+     *         get: (key: string) => string
+     *     },
+     *     onImport: () => void | Promise<void>,
+     *     onExport: () => void | Promise<void>,
+     *     onSetTheme: (theme: "auto" | "dark" | "light") => void | Promise<void>,
+     *     getCurrentTheme: () => "auto" | "dark" | "light"
+     * }} ViewManagerActionsDropdownOptions
+     */
+
+    /**
      * Small command dropdown for lower-frequency View Manager actions.
      */
     class ViewManagerActionsDropdown {
+
         /**
-         * @param {{
-         *     createIconButton: (options: {
-         *         iconName: string,
-         *         title: string,
-         *         onClick: (event: MouseEvent) => void
-         *     }) => HTMLButtonElement,
-         *     onImport: () => void,
-         *     onExport: () => void,
-         *     onSetTheme: (theme: "auto" | "dark" | "light") => void,
-         *     getCurrentTheme: () => "auto" | "dark" | "light"
-         * }} options
+         * @param {ViewManagerActionsDropdownOptions} options
          */
         constructor(options) {
             this.createIconButton = options.createIconButton;
+            this.strings = options.strings;
             this.onImport = options.onImport;
             this.onExport = options.onExport;
             this.onSetTheme = options.onSetTheme;
@@ -36,11 +45,13 @@
          * @returns {HTMLDivElement}
          */
         createElement() {
-            const rootElement = document.createElement("div"),
+            const
+                ViewManagerStrings = window.MrbrCvm?.ViewManagerStrings,
+                rootElement = document.createElement("div"),
                 toggleButton = this.createIconButton({
                     iconName: "more",
-                    title: "More View Manager actions",
-                    onClick: event => {
+                    title: this.strings.get("moreViewManagerActions"),
+                    onClick: /** @param {MouseEvent} event */ event => {
                         event.stopPropagation();
                         this.toggle();
                     }
@@ -52,24 +63,24 @@
             menuElement.hidden = true;
 
             menuElement.append(
-                this.createMenuButton("Export data", "Export View Manager data", () => {
+                this.createMenuButton(this.strings.get("exportData"), this.strings.get("exportViewManagerData"), () => {
                     this.close();
                     this.onExport();
                 }),
-                this.createMenuButton("Import data", "Import View Manager data", () => {
+                this.createMenuButton(this.strings.get("importData"), this.strings.get("importViewManagerData"), () => {
                     this.close();
                     this.onImport();
                 }),
                 this.createSeparator(),
-                this.createMenuButton("Light theme", "Use Light theme", () => {
+                this.createMenuButton(this.strings.get("lightTheme"), this.strings.get("useLightTheme"), () => {
                     this.close();
                     this.onSetTheme("light");
                 }, () => this.getCurrentTheme() === "light"),
-                this.createMenuButton("Dark theme", "Use Dark theme", () => {
+                this.createMenuButton(this.strings.get("darkTheme"), this.strings.get("useDarkTheme"), () => {
                     this.close();
                     this.onSetTheme("dark");
                 }, () => this.getCurrentTheme() === "dark"),
-                this.createMenuButton("Auto theme", "Use Auto theme", () => {
+                this.createMenuButton(this.strings.get("autoTheme"), this.strings.get("useAutoTheme"), () => {
                     this.close();
                     this.onSetTheme("auto");
                 }, () => this.getCurrentTheme() === "auto")
