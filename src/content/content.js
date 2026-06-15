@@ -56,7 +56,32 @@
          */
         pendingDomUpdateCallbacks = [];
 
+        /**
+         * @type {string}
+         */
+        conversationKey = "";
 
+        /**
+         * @type {{
+         *     version: number,
+         *     globalUi: {
+         *         theme: "auto" | "dark" | "light",
+         *         isPanelCollapsed: boolean
+         *     },
+         *     conversations: Record<string, {
+         *         bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }>,
+         *         collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
+         *     }>
+         * }}
+         */
+        storageRoot = {
+            version: 2,
+            globalUi: {
+                theme: "auto",
+                isPanelCollapsed: false
+            },
+            conversations: {}
+        };
 
         /**
          * Starts the extension content script.
@@ -72,6 +97,40 @@
                 this.createPanel();
                 this.render();
                 this.startMutationObserver();
+                this.startLocationObserver();
+            });
+        }
+        /**
+        * Watches for single-page-app URL changes.
+        *
+        * @returns {void}
+        */
+        startLocationObserver() {
+            let previousHref = window.location.href;
+
+            window.setInterval(async () => {
+                if (window.location.href === previousHref) {
+                    return;
+                }
+
+                previousHref = window.location.href;
+
+                await this.handleConversationChanged();
+            }, 500);
+        }
+
+        /**
+         * Reloads conversation-scoped state after navigation.
+         *
+         * @returns {Promise<void>}
+         */
+        async handleConversationChanged() {
+            await this.loadState();
+
+            this.scheduleDomUpdate(() => {
+                this.applyThemeClass();
+                this.scanner.findBlocks();
+                this.render();
             });
         }
         /**
@@ -80,25 +139,67 @@
          * @returns {Promise<void>}
          */
         async loadState() {
-            const result = await chrome.storage.local.get(MrbrChatGptViewManager.STORAGE_KEY);
-            const savedState = result[MrbrChatGptViewManager.STORAGE_KEY];
+            this.conversationKey = this.getConversationKey();
 
-            if (savedState && typeof savedState === "object") {
-                this.state = {
-                    bookmarks: Array.isArray(savedState.bookmarks)
-                        ? savedState.bookmarks
-                        : [],
-                    collapsedBlocks: Array.isArray(savedState.collapsedBlocks)
-                        ? savedState.collapsedBlocks
-                        : [],
-                    ui: {
-                        theme: savedState.ui?.theme === "dark" || savedState.ui?.theme === "light"
-                            ? savedState.ui.theme
-                            : "auto",
-                        isPanelCollapsed: savedState.ui?.isPanelCollapsed === true
+            const result = await chrome.storage.local.get(MrbrChatGptViewManager.STORAGE_KEY),
+                savedState = result[MrbrChatGptViewManager.STORAGE_KEY];
+
+            if (!savedState || typeof savedState !== "object") {
+                this.storageRoot = {
+                    version: 2,
+                    globalUi: this.normalizeUiState(null),
+                    conversations: {
+                        [this.conversationKey]: this.createEmptyConversationState()
                     }
                 };
+
+                this.state = {
+                    ...this.createEmptyConversationState(),
+                    ui: this.storageRoot.globalUi
+                };
+
+                return;
             }
+
+            if (savedState.version === 2 && savedState.conversations && typeof savedState.conversations === "object") {
+                this.storageRoot = {
+                    version: 2,
+                    globalUi: this.normalizeUiState(savedState.globalUi),
+                    conversations: savedState.conversations
+                };
+
+                const conversationState = this.normalizeConversationState(
+                    this.storageRoot.conversations[this.conversationKey]
+                );
+
+                this.storageRoot.conversations[this.conversationKey] = conversationState;
+
+                this.state = {
+                    bookmarks: conversationState.bookmarks,
+                    collapsedBlocks: conversationState.collapsedBlocks,
+                    ui: this.storageRoot.globalUi
+                };
+
+                return;
+            }
+
+            const migratedConversationState = this.normalizeConversationState(savedState);
+
+            this.storageRoot = {
+                version: 2,
+                globalUi: this.normalizeUiState(savedState.ui),
+                conversations: {
+                    [this.conversationKey]: migratedConversationState
+                }
+            };
+
+            this.state = {
+                bookmarks: migratedConversationState.bookmarks,
+                collapsedBlocks: migratedConversationState.collapsedBlocks,
+                ui: this.storageRoot.globalUi
+            };
+
+            await this.saveState();
         }
         /**
          * Applies the selected theme class to the document root.
@@ -116,7 +217,70 @@
 
             rootElement.classList.add(`mrbr-cvm-theme-${this.state.ui.theme}`);
         }
+        /**
+         * Gets the storage key for the current ChatGPT conversation.
+         *
+         * @returns {string}
+         */
+        getConversationKey() {
+            const url = new URL(window.location.href);
 
+            if (url.pathname.startsWith("/c/")) {
+                return `${url.origin}${url.pathname}`;
+            }
+
+            return `${url.origin}${url.pathname}`;
+        }
+
+        /**
+         * Gets a blank per-conversation state object.
+         *
+         * @returns {{
+         *     bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }>,
+         *     collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
+         * }}
+         */
+        createEmptyConversationState() {
+            return {
+                bookmarks: [],
+                collapsedBlocks: []
+            };
+        }
+
+        /**
+         * Gets a safe UI state.
+         *
+         * @param {any} ui
+         * @returns {{ theme: "auto" | "dark" | "light", isPanelCollapsed: boolean }}
+         */
+        normalizeUiState(ui) {
+            return {
+                theme: ui?.theme === "dark" || ui?.theme === "light" || ui?.theme === "auto"
+                    ? ui.theme
+                    : "auto",
+                isPanelCollapsed: ui?.isPanelCollapsed === true
+            };
+        }
+
+        /**
+         * Normalises a saved conversation state.
+         *
+         * @param {any} conversationState
+         * @returns {{
+         *     bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }>,
+         *     collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
+         * }}
+         */
+        normalizeConversationState(conversationState) {
+            return {
+                bookmarks: Array.isArray(conversationState?.bookmarks)
+                    ? conversationState.bookmarks
+                    : [],
+                collapsedBlocks: Array.isArray(conversationState?.collapsedBlocks)
+                    ? conversationState.collapsedBlocks
+                    : []
+            };
+        }
         /**
          * Sets and persists the selected UI theme.
          *
@@ -159,8 +323,19 @@
          * @returns {Promise<void>}
          */
         async saveState() {
+            if (!this.conversationKey) {
+                this.conversationKey = this.getConversationKey();
+            }
+
+            this.storageRoot.version = 2;
+            this.storageRoot.globalUi = this.state.ui;
+            this.storageRoot.conversations[this.conversationKey] = {
+                bookmarks: this.state.bookmarks,
+                collapsedBlocks: this.state.collapsedBlocks
+            };
+
             await chrome.storage.local.set({
-                [MrbrChatGptViewManager.STORAGE_KEY]: this.state
+                [MrbrChatGptViewManager.STORAGE_KEY]: this.storageRoot
             });
         }
 
@@ -179,7 +354,11 @@
             this.panelElement = document.createElement("div");
             this.panelElement.id = MrbrChatGptViewManager.PANEL_ID;
             this.panelElement.className = "mrbr-cvm-panel";
-
+            this.panelElement.__mrbrConversationKey = this.conversationKey;
+            /**
+             * Get conversation key in Chrome console for the current panel with:
+             * document.querySelector("#mrbr-cvm-panel")?.__mrbrConversationKey
+             */
             document.documentElement.appendChild(this.panelElement);
         }
         /**
