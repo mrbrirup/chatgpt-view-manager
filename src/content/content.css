@@ -9,10 +9,23 @@
     --mrbr-cvm-bookmark-background: #1f1f1f;
     --mrbr-cvm-bookmark-border: #555;
 }
+
 :root {
     --mrbr-cvm-pending-bookmark-outline: #ff3333;
     --mrbr-cvm-pending-bookmark-shadow: rgba(255, 51, 51, 0.25);
 }
+
+:root {
+    --mrbr-cvm-collapse-target-outline: #ff3333;
+    --mrbr-cvm-collapse-target-shadow: rgba(255, 51, 51, 0.25);
+}
+
+.mrbr-cvm-collapse-target {
+    outline: 3px dashed var(--mrbr-cvm-collapse-target-outline) !important;
+    outline-offset: 6px !important;
+    box-shadow: 0 0 0 6px var(--mrbr-cvm-collapse-target-shadow) !important;
+}
+
 .mrbr-cvm-panel {
     position: fixed;
     top: 80px;
@@ -85,6 +98,7 @@
 .mrbr-cvm-hidden {
     display: none !important;
 }
+
 .mrbr-cvm-status {
     margin-bottom: 8px;
     color: #bbb;
@@ -102,6 +116,7 @@
     outline-offset: 4px !important;
     transition: outline-color 1.2s ease;
 }
+
 .mrbr-cvm-bookmark-key {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -113,6 +128,7 @@
     outline-offset: 6px !important;
     box-shadow: 0 0 0 6px var(--mrbr-cvm-pending-bookmark-shadow) !important;
 }
+
 .mrbr-cvm-dialog-backdrop {
     position: fixed;
     inset: 0;
@@ -181,5 +197,55 @@
 }
 
 .mrbr-cvm-dialog-actions button:hover {
+    background: var(--mrbr-cvm-button-hover-background);
+}
+
+:root {
+    --mrbr-cvm-collapsed-background: #1a1a1a;
+    --mrbr-cvm-collapsed-border: #666;
+    --mrbr-cvm-collapsed-foreground: #ddd;
+}
+
+.mrbr-cvm-collapsed-block {
+    display: none !important;
+}
+
+.mrbr-cvm-collapsed-placeholder {
+    box-sizing: border-box;
+    margin: 12px 0;
+    padding: 10px 12px;
+    border: 1px dashed var(--mrbr-cvm-collapsed-border);
+    border-radius: 6px;
+    background: var(--mrbr-cvm-collapsed-background);
+    color: var(--mrbr-cvm-collapsed-foreground);
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+}
+
+.mrbr-cvm-collapsed-title {
+    margin-bottom: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mrbr-cvm-collapsed-meta {
+    margin-bottom: 8px;
+    color: #aaa;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 11px;
+}
+
+.mrbr-cvm-collapsed-placeholder button {
+    cursor: pointer;
+    padding: 5px 8px;
+    border: 1px solid var(--mrbr-cvm-panel-border);
+    border-radius: 5px;
+    background: var(--mrbr-cvm-button-background);
+    color: var(--mrbr-cvm-panel-foreground);
+    font-size: 12px;
+}
+
+.mrbr-cvm-collapsed-placeholder button:hover {
     background: var(--mrbr-cvm-button-hover-background);
 }
