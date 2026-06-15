@@ -2,6 +2,13 @@
     "use strict";
 
     /**
+     * @typedef {{
+     *     blockKey: string,
+     *     notes: string,
+     *     updatedUtc: string
+     * }} MrbrCvmBlockNote
+     */
+    /**
     * @typedef {new () => ConversationScanner} ConversationScannerConstructor
     */
 
@@ -33,11 +40,12 @@
      */
 
     /**
-    * @typedef {{
-    *     bookmarks: MrbrCvmBookmark[],
-    *     collapsedBlocks: MrbrCvmCollapsedBlock[]
-    * }} MrbrCvmConversationState
-    */
+     * @typedef {{
+     *     bookmarks: MrbrCvmBookmark[],
+     *     collapsedBlocks: MrbrCvmCollapsedBlock[],
+     *     blockNotes: Record<string, MrbrCvmBlockNote>
+     * }} MrbrCvmConversationState
+     */
 
     /**
      * @typedef {{
@@ -218,6 +226,7 @@
         state = {
             bookmarks: [],
             collapsedBlocks: [],
+            blockNotes: {},
             ui: {
                 theme: "auto",
                 isPanelCollapsed: false,
@@ -315,7 +324,7 @@
         getCollapsedBlockSearchText(collapsedBlock) {
             return [
                 this.getCollapsedBlockTitle(collapsedBlock),
-                collapsedBlock.notes,
+                this.getBlockNotes(collapsedBlock.blockKey),
                 collapsedBlock.role,
                 collapsedBlock.blockKey,
                 collapsedBlock.contentHash,
@@ -565,6 +574,7 @@
                 this.state = {
                     bookmarks: conversationState.bookmarks,
                     collapsedBlocks: conversationState.collapsedBlocks,
+                    blockNotes: conversationState.blockNotes,
                     ui: this.storageRoot.globalUi
                 };
 
@@ -588,6 +598,7 @@
                 this.state = {
                     bookmarks: conversationState.bookmarks,
                     collapsedBlocks: conversationState.collapsedBlocks,
+                    blockNotes: conversationState.blockNotes,
                     ui: this.storageRoot.globalUi
                 };
 
@@ -607,6 +618,7 @@
             this.state = {
                 bookmarks: migratedConversationState.bookmarks,
                 collapsedBlocks: migratedConversationState.collapsedBlocks,
+                blockNotes: migratedConversationState.blockNotes,
                 ui: this.storageRoot.globalUi
             };
 
@@ -651,7 +663,8 @@
         createEmptyConversationState() {
             return {
                 bookmarks: [],
-                collapsedBlocks: []
+                collapsedBlocks: [],
+                blockNotes: {}
             };
         }
 
@@ -681,9 +694,73 @@
          * @returns {MrbrCvmConversationState}
          */
         normalizeConversationState(conversationState) {
+            /** @type {Record<string, MrbrCvmBlockNote>} */
+            const blockNotes = {};
+
+            if (
+                conversationState?.blockNotes
+                && typeof conversationState.blockNotes === "object"
+                && !Array.isArray(conversationState.blockNotes)
+            ) {
+                Object.entries(conversationState.blockNotes).forEach(([blockKey, value]) => {
+                    if (!blockKey || !value || typeof value !== "object") {
+                        return;
+                    }
+
+                    const blockNote = /** @type {any} */ (value),
+                        notes = typeof blockNote.notes === "string"
+                            ? blockNote.notes
+                            : "";
+
+                    if (!notes) {
+                        return;
+                    }
+
+                    blockNotes[blockKey] = {
+                        blockKey,
+                        notes,
+                        updatedUtc: typeof blockNote.updatedUtc === "string"
+                            ? blockNote.updatedUtc
+                            : new Date().toISOString()
+                    };
+                });
+            }
+
+            const collapsedBlocks = Array.isArray(conversationState?.collapsedBlocks)
+                ? conversationState.collapsedBlocks.map(/** @param {any} collapsedBlock */ collapsedBlock => {
+                    const blockKey = typeof collapsedBlock.blockKey === "string"
+                        ? collapsedBlock.blockKey
+                        : "",
+                        notes = typeof collapsedBlock.notes === "string"
+                            ? collapsedBlock.notes
+                            : "";
+
+                    if (blockKey && notes && !blockNotes[blockKey]) {
+                        blockNotes[blockKey] = {
+                            blockKey,
+                            notes,
+                            updatedUtc: typeof collapsedBlock.updatedUtc === "string"
+                                ? collapsedBlock.updatedUtc
+                                : new Date().toISOString()
+                        };
+                    }
+
+                    return {
+                        ...collapsedBlock,
+                        title: typeof collapsedBlock.title === "string"
+                            ? collapsedBlock.title
+                            : "",
+                        notes,
+                        updatedUtc: typeof collapsedBlock.updatedUtc === "string"
+                            ? collapsedBlock.updatedUtc
+                            : undefined
+                    };
+                })
+                : [];
+
             return {
                 bookmarks: Array.isArray(conversationState?.bookmarks)
-                    ? conversationState.bookmarks.map(/** @param {MrbrCvmBookmark} bookmark */ bookmark => ({
+                    ? conversationState.bookmarks.map(/** @param {any} bookmark */ bookmark => ({
                         ...bookmark,
                         title: typeof bookmark.title === "string"
                             ? bookmark.title
@@ -696,20 +773,8 @@
                             : undefined
                     }))
                     : [],
-                collapsedBlocks: Array.isArray(conversationState?.collapsedBlocks)
-                    ? conversationState.collapsedBlocks.map(/** @param {MrbrCvmCollapsedBlock} collapsedBlock */ collapsedBlock => ({
-                        ...collapsedBlock,
-                        title: typeof collapsedBlock.title === "string" && collapsedBlock.title.trim()
-                            ? collapsedBlock.title
-                            : "",
-                        notes: typeof collapsedBlock.notes === "string"
-                            ? collapsedBlock.notes
-                            : "",
-                        updatedUtc: typeof collapsedBlock.updatedUtc === "string"
-                            ? collapsedBlock.updatedUtc
-                            : undefined
-                    }))
-                    : []
+                collapsedBlocks,
+                blockNotes
             };
         }
         /**
@@ -762,14 +827,61 @@
             this.storageRoot.globalUi = this.state.ui;
             this.storageRoot.conversations[this.conversationKey] = {
                 bookmarks: this.state.bookmarks,
-                collapsedBlocks: this.state.collapsedBlocks
+                collapsedBlocks: this.state.collapsedBlocks,
+                blockNotes: this.state.blockNotes
             };
 
             await chrome.storage.local.set({
                 [MrbrChatGptViewManager.STORAGE_KEY]: this.storageRoot
             });
         }
+        /**
+         * Gets tooltip text for a block-level note.
+         *
+         * @param {string | undefined} blockKey
+         * @returns {string}
+         */
+        getBlockNotesTooltip(blockKey) {
+            const notes = this.getBlockNotes(blockKey);
 
+            return notes
+                ? `${this.getString("hasNotes")}: ${notes}`
+                : this.getString("noNotes");
+        }
+        /**
+         * Sets notes for a conversation block.
+         *
+         * @param {string} blockKey
+         * @param {string} notes
+         * @returns {void}
+         */
+        setBlockNotes(blockKey, notes) {
+            const trimmedNotes = notes.trim();
+
+            if (!trimmedNotes) {
+                delete this.state.blockNotes[blockKey];
+                return;
+            }
+
+            this.state.blockNotes[blockKey] = {
+                blockKey,
+                notes: trimmedNotes,
+                updatedUtc: new Date().toISOString()
+            };
+        }
+        /**
+         * Gets notes for a conversation block.
+         *
+         * @param {string | undefined} blockKey
+         * @returns {string}
+         */
+        getBlockNotes(blockKey) {
+            if (!blockKey) {
+                return "";
+            }
+
+            return this.state.blockNotes[blockKey]?.notes || "";
+        }
         /**
          * Creates the floating panel.
          *
@@ -996,14 +1108,15 @@
                 }),
                 labelElement = document.createElement("div"),
                 key = collapsedBlock.blockKey || `${collapsedBlock.role || "unknown"}-${collapsedBlock.blockIndex || "?"}`;
+            const blockNotes = this.getBlockNotes(collapsedBlock.blockKey);
 
             rowElement.className = "mrbr-cvm-compact-row";
 
             labelElement.className = "mrbr-cvm-compact-row-label";
             labelElement.textContent = title;
 
-            labelElement.title = collapsedBlock.notes
-                ? `${title}\n\n${collapsedBlock.notes}\n\n${key}`
+            labelElement.title = blockNotes
+                ? `${title}\n\n${blockNotes}\n\n${key}`
                 : `${title}\n${key}`;
 
             rowElement.append(goButton, restoreButton, deleteButton, labelElement);
@@ -1855,7 +1968,7 @@
                     role: identity.role,
                     contentHash: identity.contentHash,
                     title,
-                    notes: "",
+                    notes: this.getBlockNotes(identity.blockKey),
                     collapsedUtc: new Date().toISOString()
                 });
             }
@@ -1922,6 +2035,7 @@
         createCollapsePlaceholder(collapsedBlock) {
             const containerElement = document.createElement("div"),
                 title = this.getCollapsedBlockTitle(collapsedBlock),
+                blockNotes = this.getBlockNotes(collapsedBlock.blockKey),
                 expandButton = this.createIconButton({
                     iconName: "restore",
                     title: this.getString("expandCollapsedBlock"),
@@ -1931,8 +2045,8 @@
                 }),
                 noteButton = this.createIconButton({
                     iconName: "note",
-                    title: collapsedBlock.notes
-                        ? `${this.getString("hasNotes")}: ${collapsedBlock.notes}`
+                    title: blockNotes
+                        ? `${this.getString("hasNotes")}: ${blockNotes}`
                         : this.getString("noNotes"),
                     onClick: async () => {
                         await this.editCollapsedBlockNotes(collapsedBlock);
@@ -1943,13 +2057,13 @@
             containerElement.className = "mrbr-cvm-collapsed-placeholder";
             containerElement.setAttribute("data-mrbr-cvm-placeholder-key", collapsedBlock.blockKey);
 
-            if (collapsedBlock.notes) {
+            if (blockNotes) {
                 noteButton.classList.add("mrbr-cvm-note-button-active");
             }
 
             titleElement.className = "mrbr-cvm-collapsed-placeholder-title";
-            titleElement.title = collapsedBlock.notes
-                ? `${title}\n\n${collapsedBlock.notes}\n\n${collapsedBlock.blockKey}`
+            titleElement.title = blockNotes
+                ? `${title}\n\n${blockNotes}\n\n${collapsedBlock.blockKey}`
                 : `${title}\n${collapsedBlock.blockKey}`;
             titleElement.textContent = title;
 
@@ -1971,15 +2085,12 @@
         }
 
         /**
-         * Restores one collapsed block.
+         * Restores a collapsed block.
          *
          * @param {MrbrCvmCollapsedBlock} collapsedBlock
          * @returns {Promise<void>}
          */
         async restoreCollapsedBlock(collapsedBlock) {
-            const block = this.scanner.findBlockForBookmark(collapsedBlock),
-                placeholder = this.findCollapsePlaceholder(collapsedBlock);
-
             this.state.collapsedBlocks = this.state.collapsedBlocks.filter(item => {
                 return item.blockKey !== collapsedBlock.blockKey;
             });
@@ -1987,13 +2098,15 @@
             await this.saveState();
 
             this.scheduleDomUpdate(() => {
-                if (block) {
-                    block.classList.remove("mrbr-cvm-collapsed-block");
-                    this.flashBlock(block);
-                }
+                const placeholder = this.findCollapsePlaceholder(collapsedBlock),
+                    block = this.scanner.findBlockForBookmark(collapsedBlock);
 
                 if (placeholder) {
                     placeholder.remove();
+                }
+
+                if (block) {
+                    block.classList.remove("mrbr-cvm-collapsed-block");
                 }
 
                 this.render();
@@ -2532,18 +2645,22 @@
             this.render();
         }
         /**
-        * Edits notes for a collapsed block.
-        *
-        * @param {MrbrCvmCollapsedBlock} collapsedBlock
-        * @returns {Promise<void>}
-        */
+         * Edits notes for a collapsed block.
+         *
+         * @param {MrbrCvmCollapsedBlock} collapsedBlock
+         * @returns {Promise<void>}
+         */
         async editCollapsedBlockNotes(collapsedBlock) {
+            if (!collapsedBlock.blockKey) {
+                return;
+            }
+
             const result = await this.showTitleNotesEditorDialog({
                 dialogTitle: this.getString("collapsedBlockNotesTitle"),
                 titleLabel: this.getString("bookmarkLabel"),
                 notesLabel: this.getString("bookmarkNotes"),
-                title: collapsedBlock.title,
-                notes: collapsedBlock.notes || ""
+                title: this.getCollapsedBlockTitle(collapsedBlock),
+                notes: this.getBlockNotes(collapsedBlock.blockKey)
             });
 
             if (!result || !result.title) {
@@ -2554,16 +2671,16 @@
                 return item.blockKey === collapsedBlock.blockKey;
             });
 
-            if (!existingCollapsedBlock) {
-                return;
+            if (existingCollapsedBlock) {
+                existingCollapsedBlock.title = result.title;
+                existingCollapsedBlock.updatedUtc = new Date().toISOString();
             }
 
-            existingCollapsedBlock.title = result.title;
-            existingCollapsedBlock.notes = result.notes;
-            existingCollapsedBlock.updatedUtc = new Date().toISOString();
+            this.setBlockNotes(collapsedBlock.blockKey, result.notes);
 
             await this.saveState();
             this.render();
+            this.applyCollapsedBlocks();
         }
         /**
          * Toggles a View Manager section collapsed state.
