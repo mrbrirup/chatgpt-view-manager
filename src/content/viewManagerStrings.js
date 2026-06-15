@@ -135,10 +135,16 @@
             hasNotes: "Has notes",
             noNotes: "No notes",
             expandCollapsedBlock: "Expand collapsed block",
-            
+
             bookmarkFallbackTitle: "Bookmark",
             bookmarkFallbackTitleWithIndex: "Bookmark {0}",
 
+            filterItems: "Filter items",
+            filterItemsPlaceholder: "Filter",
+            clearFilter: "Clear filter",
+
+            noMatchingBookmarks: "No matching bookmarks.",
+            noMatchingCollapsedBlocks: "No matching collapsed blocks.",
 
         };
     }

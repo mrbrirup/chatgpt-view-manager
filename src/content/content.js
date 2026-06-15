@@ -276,7 +276,203 @@
             },
             conversations: {}
         };
+        /** @type {string} */
+        filterText = "";
+        /**
+         * Normalises text for filter matching.
+         *
+         * @param {string | number | undefined | null} value
+         * @returns {string}
+         */
+        normalizeFilterText(value) {
+            return String(value ?? "").trim().toLowerCase();
+        }
+        /**
+         * Gets searchable text for a bookmark.
+         *
+         * @param {MrbrCvmBookmark} bookmark
+         * @param {number} index
+         * @returns {string}
+         */
+        getBookmarkSearchText(bookmark, index) {
+            return [
+                this.getBookmarkTitle(bookmark, index),
+                bookmark.notes,
+                bookmark.role,
+                bookmark.blockKey,
+                bookmark.contentHash,
+                bookmark.blockIndex
+            ]
+                .map(value => this.normalizeFilterText(value))
+                .join(" ");
+        }
+        /**
+         * Gets searchable text for a collapsed block.
+         *
+         * @param {MrbrCvmCollapsedBlock} collapsedBlock
+         * @returns {string}
+         */
+        getCollapsedBlockSearchText(collapsedBlock) {
+            return [
+                this.getCollapsedBlockTitle(collapsedBlock),
+                collapsedBlock.notes,
+                collapsedBlock.role,
+                collapsedBlock.blockKey,
+                collapsedBlock.contentHash,
+                collapsedBlock.blockIndex
+            ]
+                .map(value => this.normalizeFilterText(value))
+                .join(" ");
+        }
+        /**
+         * Clears the overlay filter text.
+         *
+         * @returns {void}
+         */
+        clearFilterText() {
+            this.filterText = "";
 
+            if (this.filterDebounceTimeoutId) {
+                window.clearTimeout(this.filterDebounceTimeoutId);
+                this.filterDebounceTimeoutId = 0;
+            }
+
+            this.scheduleDomUpdate(() => {
+                const inputElement = this.panelElement?.querySelector(".mrbr-cvm-filter-input"),
+                    clearButton = this.#clearButton
+                        || this.panelElement?.querySelector(".mrbr-cvm-filter-clear-button");
+
+                if (inputElement instanceof HTMLInputElement) {
+                    inputElement.value = "";
+                    inputElement.focus();
+                }
+
+                if (clearButton instanceof HTMLButtonElement) {
+                    clearButton.disabled = true;
+                    this.#clearButton = clearButton;
+                }
+
+                this.renderListsOnly();
+            });
+        }
+
+        /**
+         * Re-renders only the bookmark and collapsed-block list area.
+         *
+         * @returns {void}
+         */
+        renderListsOnly() {
+            const listsContainerElement = this.panelElement?.querySelector(".mrbr-cvm-lists-container");
+
+            if (!listsContainerElement) {
+                this.render();
+                return;
+            }
+
+            listsContainerElement.replaceChildren(
+                this.createBookmarksListElement(),
+                this.createCollapsedBlocksListElement()
+            );
+        }
+        /**
+         * Creates the compact overlay filter control.
+         *
+         * @returns {HTMLDivElement}
+         */
+        createFilterControlElement() {
+            const
+                self = this,
+                containerElement = document.createElement("div"),
+                searchIconElement = this.iconButtonFactory.createIconElement("search"),
+                inputElement = document.createElement("input"),
+                clearButton = this.createIconButton({
+                    iconName: "clear",
+                    title: this.getString("clearFilter"),
+                    onClick: () => {
+                        self.clearFilterText();
+                    }
+                });
+
+            containerElement.className = "mrbr-cvm-filter-control";
+            containerElement.title = this.getString("filterItems");
+
+            searchIconElement.classList.add("mrbr-cvm-filter-icon");
+
+            inputElement.className = "mrbr-cvm-filter-input";
+            inputElement.type = "text";
+            inputElement.value = this.filterText || "";
+            inputElement.placeholder = this.getString("filterItemsPlaceholder");
+            inputElement.setAttribute("aria-label", this.getString("filterItems"));
+
+            inputElement.addEventListener("input", () => {
+                this.setFilterTextDebounced(inputElement.value);
+            });
+
+            inputElement.addEventListener("keydown", event => {
+                if (event.key === "Escape") {
+                    event.preventDefault();
+                    this.clearFilterText();
+                }
+            });
+
+            clearButton.classList.add("mrbr-cvm-filter-clear-button");
+            clearButton.disabled = this.filterText === "";
+
+            containerElement.append(searchIconElement, inputElement, clearButton);
+
+            return containerElement;
+        }
+        /**
+         * Sets the overlay filter text using a debounce.
+         *
+         * @param {string} value
+         * @returns {void}
+         */
+        setFilterTextDebounced(value) {
+            this.filterText = value || "";
+
+            const clearButton = this.#clearButton
+                || this.panelElement?.querySelector(".mrbr-cvm-filter-clear-button");
+
+            if (clearButton instanceof HTMLButtonElement) {
+                clearButton.disabled = this.filterText === "";
+                this.#clearButton = clearButton;
+            }
+
+            if (this.filterDebounceTimeoutId) {
+                window.clearTimeout(this.filterDebounceTimeoutId);
+            }
+
+            this.filterDebounceTimeoutId = window.setTimeout(() => {
+                this.filterDebounceTimeoutId = 0;
+
+                this.scheduleDomUpdate(() => {
+                    this.renderListsOnly();
+                });
+            }, 150);
+        }
+        /**
+         * Cached filter clear button.
+         *
+         * @type {HTMLButtonElement | null}
+         */
+        #clearButton = null;
+        /**
+         * Checks whether a bookmark matches the current filter.
+         *
+         * @param {MrbrCvmBookmark} bookmark
+         * @param {number} index
+         * @returns {boolean}
+         */
+        doesBookmarkMatchFilter(bookmark, index) {
+            const filterText = this.normalizeFilterText(this.filterText);
+
+            if (!filterText) {
+                return true;
+            }
+
+            return this.getBookmarkSearchText(bookmark, index).includes(filterText);
+        }
         /**
          * Starts the extension content script.
          *
@@ -658,7 +854,7 @@
                 }
                 this.panelElement.innerHTML = "";
                 this.panelElement.classList.remove("mrbr-cvm-panel-collapsed");
-
+                this.#clearButton = null;
                 const headerElement = document.createElement("div"),
                     titleElement = document.createElement("h2"),
                     collapsePanelButton = this.createIconButton({
@@ -684,12 +880,21 @@
                 statusElement.className = "mrbr-cvm-status";
                 statusElement.textContent = this.formatString("blocksDetected", blocks.length);
 
+                const listsContainerElement = document.createElement("div");
+
+                listsContainerElement.className = "mrbr-cvm-lists-container";
+
+                listsContainerElement.append(
+                    this.createBookmarksListElement(),
+                    this.createCollapsedBlocksListElement()
+                );
+
+
                 this.panelElement.append(
                     headerElement,
                     statusElement,
-                    toolbarElement,
-                    bookmarkSectionElement,
-                    collapsedSectionElement
+                    this.createToolbarElement(),
+                    listsContainerElement
                 );
 
                 this.applyCollapsedBlocks(blocks);
@@ -898,17 +1103,74 @@
         }
 
         /**
-         * Creates the compact action toolbar.
+         * Creates the toolbar element.
          *
          * @returns {HTMLDivElement}
          */
         createToolbarElement() {
             const toolbarElement = document.createElement("div"),
-                actionGroupElement = document.createElement("div");
+                leftToolbarElement = document.createElement("div"),
+                bookmarkButton = this.createIconButton({
+                    iconName: "bookmark",
+                    title: this.getString("bookmarkVisibleBlock"),
+                    onClick: async () => {
+                        await this.addBookmarkForVisibleBlock();
+                    }
+                }),
+                collapseButton = this.createIconButton({
+                    iconName: "collapse",
+                    title: this.getString("collapseHighlightedBlock"),
+                    onMouseEnter: () => {
+                        this.highlightCollapseTarget();
+                    },
+                    onMouseLeave: () => {
+                        this.clearCollapseTargetHighlight();
+                    },
+                    onClick: async () => {
+                        await this.collapseHighlightedBlock();
+                    }
+                }),
+                restoreAllButton = this.createIconButton({
+                    iconName: "restore",
+                    title: this.getString("restoreAllCollapsedBlocks"),
+                    onClick: async () => {
+                        await this.restoreAllCollapsedBlocks();
+                    }
+                }),
+                rescanButton = this.createIconButton({
+                    iconName: "rescan",
+                    title: this.getString("rescanConversationBlocks"),
+                    onClick: () => {
+                        this.scanner.findBlocks();
+                        this.render();
+                    }
+                }),
+                topButton = this.createIconButton({
+                    iconName: "top",
+                    title: this.getString("scrollToTop"),
+                    onClick: () => {
+                        window.scrollTo({
+                            top: 0,
+                            behavior: "smooth"
+                        });
+                    }
+                }),
+                filterControlElement = this.createFilterControlElement();
+
+            toolbarElement.className = "mrbr-cvm-toolbar";
+            leftToolbarElement.className = "mrbr-cvm-toolbar-left";
+
+            leftToolbarElement.append(
+                bookmarkButton,
+                collapseButton,
+                restoreAllButton,
+                rescanButton,
+                topButton
+            );
 
             this.actionsDropdown = new ViewManagerActionsDropdown({
                 createIconButton: options => this.createIconButton({
-                    iconName: /** @type {any} */ (options.iconName),
+                    iconName: options.iconName,
                     title: options.title,
                     onClick: options.onClick
                 }),
@@ -921,72 +1183,137 @@
                 onImport: () => {
                     this.importState();
                 },
-                onSetTheme: theme => {
-                    this.setTheme(theme);
+                onSetTheme: async theme => {
+                    await this.setTheme(theme);
                 },
                 getCurrentTheme: () => this.state.ui.theme
             });
 
-            toolbarElement.className = "mrbr-cvm-toolbar";
-            actionGroupElement.className = "mrbr-cvm-icon-toolbar";
-
-            actionGroupElement.append(
-                this.createIconButton({
-                    iconName: "bookmark",
-                    title: this.getString("bookmarkVisibleBlock"),
-                    onClick: () => {
-                        this.addBookmarkForVisibleBlock();
-                    }
-                }),
-                this.createIconButton({
-                    iconName: "collapse",
-                    title: this.getString("collapseHighlightedBlock"),
-                    onMouseEnter: () => {
-                        this.highlightCollapseTarget();
-                    },
-                    onMouseLeave: () => {
-                        this.clearCollapseTargetHighlight();
-                    },
-                    onClick: () => {
-                        this.collapseHighlightedBlock();
-                    }
-                }),
-                this.createIconButton({
-                    iconName: "restore",
-                    title: this.getString("restoreAllCollapsedBlocks"),
-                    onClick: () => {
-                        this.restoreAllBlocks();
-                    }
-                }),
-                this.createIconButton({
-                    iconName: "rescan",
-                    title: this.getString("rescanConversationBlocks"),
-                    onClick: () => {
-                        this.scheduleDomUpdate(() => {
-                            const rescannedBlocks = this.scanner.findBlocks();
-
-                            this.applyCollapsedBlocks(rescannedBlocks);
-                            this.updateBlockCountStatus(rescannedBlocks.length);
-                        });
-                    }
-                }),
-                this.createIconButton({
-                    iconName: "top",
-                    title: this.getString("scrollToTop"),
-                    onClick: () => {
-                        window.scrollTo({
-                            top: 0,
-                            behavior: "smooth"
-                        });
-                    }
-                })
+            toolbarElement.append(
+                leftToolbarElement,
+                filterControlElement,
+                this.actionsDropdown.createElement()
             );
-
-            toolbarElement.append(actionGroupElement, this.actionsDropdown.createElement());
 
             return toolbarElement;
         }
+        /**
+         * Restores all collapsed blocks.
+         *
+         * @returns {Promise<void>}
+         */
+        async restoreAllCollapsedBlocks() {
+            const collapsedBlocks = [...this.state.collapsedBlocks];
 
+            if (!collapsedBlocks.length) {
+                return;
+            }
+
+            this.state.collapsedBlocks = [];
+
+            await this.saveState();
+
+            this.scheduleDomUpdate(() => {
+                collapsedBlocks.forEach(collapsedBlock => {
+                    const placeholder = this.findCollapsePlaceholder(collapsedBlock),
+                        block = this.scanner.findBlockForBookmark(collapsedBlock);
+
+                    if (placeholder) {
+                        placeholder.remove();
+                    }
+
+                    if (block) {
+                        block.classList.remove("mrbr-cvm-collapsed-block");
+                    }
+                });
+
+                this.render();
+            });
+        }
+        /**
+         * Creates the bookmarks list element.
+         *
+         * @returns {HTMLDivElement}
+         */
+        createBookmarksListElement() {
+            const listElement = document.createElement("div");
+            const filteredBookmarks = this.state.bookmarks
+                .map((bookmark, index) => ({
+                    bookmark,
+                    index
+                }))
+                .filter(item => this.doesBookmarkMatchFilter(item.bookmark, item.index));
+
+            listElement.className = "mrbr-cvm-compact-list";
+
+            if (!filteredBookmarks.length) {
+                const emptyElement = document.createElement("div");
+
+                emptyElement.className = "mrbr-cvm-empty";
+                emptyElement.textContent = this.getString("noBookmarksYet");
+
+                listElement.append(emptyElement);
+            } else {
+                filteredBookmarks.forEach(item => {
+                    listElement.append(this.createBookmarkElement(item.bookmark, item.index));
+                });
+            }
+
+            return this.createCompactSectionElement(
+                "bookmarks",
+                this.getString("bookmarksSectionTitle"),
+                filteredBookmarks.length,
+                listElement
+            );
+        }
+        /**
+         * Creates the collapsed blocks list element.
+         *
+         * @returns {HTMLDivElement}
+         */
+        createCollapsedBlocksListElement() {
+            const listElement = document.createElement("div"),
+                filteredCollapsedBlocks = this.state.collapsedBlocks.filter(collapsedBlock => {
+                    return this.doesCollapsedBlockMatchFilter(collapsedBlock);
+                });
+
+            listElement.className = "mrbr-cvm-compact-list";
+
+            if (!filteredCollapsedBlocks.length) {
+                const emptyElement = document.createElement("div");
+
+                emptyElement.className = "mrbr-cvm-empty";
+                emptyElement.textContent = this.getString("noCollapsedBlocks");
+
+                listElement.append(emptyElement);
+            } else {
+                filteredCollapsedBlocks.forEach(collapsedBlock => {
+                    listElement.append(this.createCollapsedBlockElement(collapsedBlock));
+                });
+            }
+
+            return this.createCompactSectionElement(
+                "collapsedBlocks",
+                this.getString("collapsedBlocksSectionTitle"),
+                filteredCollapsedBlocks.length,
+                listElement
+            );
+        }
+        /**
+         * Checks whether a collapsed block matches the current filter.
+         *
+         * @param {MrbrCvmCollapsedBlock} collapsedBlock
+         * @returns {boolean}
+         */
+        doesCollapsedBlockMatchFilter(collapsedBlock) {
+            const filterText = this.normalizeFilterText(this.filterText);
+
+            if (!filterText) {
+                return true;
+            }
+
+            return this.getCollapsedBlockSearchText(collapsedBlock).includes(filterText);
+        }
         /**
          * Exports the full View Manager state as a JSON file.
          *
