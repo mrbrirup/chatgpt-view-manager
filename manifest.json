@@ -15,6 +15,7 @@
         "https://chatgpt.com/*"
       ],
       "js": [
+        "src/content/conversationScanner.js",
         "src/content/content.js"
       ],
       "css": [
@@ -23,4 +24,5 @@
       "run_at": "document_idle"
     }
   ]
+
 }

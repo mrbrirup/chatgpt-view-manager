@@ -1,15 +1,7 @@
 (() => {
     "use strict";
 
-    /**
-     * ChatGPT View Manager bootstrap.
-     *
-     * This first version proves:
-     * - content script injection works
-     * - a floating panel can be created
-     * - data can persist using chrome.storage.local
-     * - bookmarks can scroll to approximate page positions
-     */
+    const ConversationScanner = window.MrbrCvm.ConversationScanner;
 
     const MrbrChatGptViewManager = class {
         static PANEL_ID = "mrbr-cvm-panel";
@@ -21,7 +13,12 @@
         panelElement = null;
 
         /**
-         * @type {{ bookmarks: Array<{ id: string, title: string, scrollY: number, createdUtc: string }> }}
+         * @type {InstanceType<typeof ConversationScanner>}
+         */
+        scanner = new ConversationScanner();
+
+        /**
+         * @type {{ bookmarks: Array<{ id: string, title: string, blockKey: string, createdUtc: string }> }}
          */
         state = {
             bookmarks: []
@@ -34,8 +31,10 @@
          */
         async start() {
             await this.loadState();
+            this.scanner.findBlocks();
             this.createPanel();
             this.render();
+            this.startMutationObserver();
         }
 
         /**
@@ -99,18 +98,31 @@
             this.panelElement.innerHTML = "";
 
             const titleElement = document.createElement("h2"),
+                statusElement = document.createElement("div"),
                 actionsElement = document.createElement("div"),
                 addBookmarkButton = document.createElement("button"),
+                rescanButton = document.createElement("button"),
                 topButton = document.createElement("button"),
-                bookmarkListElement = document.createElement("div");
+                bookmarkListElement = document.createElement("div"),
+                blocks = this.scanner.findBlocks();
 
             titleElement.textContent = "View Manager";
+
+            statusElement.className = "mrbr-cvm-status";
+            statusElement.textContent = `${blocks.length} blocks detected`;
 
             actionsElement.className = "mrbr-cvm-actions";
 
             addBookmarkButton.type = "button";
-            addBookmarkButton.textContent = "Bookmark";
-            addBookmarkButton.addEventListener("click", this.addBookmark.bind(this));
+            addBookmarkButton.textContent = "Bookmark visible";
+            addBookmarkButton.addEventListener("click", this.addBookmarkForVisibleBlock.bind(this));
+
+            rescanButton.type = "button";
+            rescanButton.textContent = "Rescan";
+            rescanButton.addEventListener("click", () => {
+                this.scanner.findBlocks();
+                this.render();
+            });
 
             topButton.type = "button";
             topButton.textContent = "Top";
@@ -127,19 +139,20 @@
                 bookmarkListElement.appendChild(this.createBookmarkElement(bookmark));
             }
 
-            actionsElement.append(addBookmarkButton, topButton);
-            this.panelElement.append(titleElement, actionsElement, bookmarkListElement);
+            actionsElement.append(addBookmarkButton, rescanButton, topButton);
+            this.panelElement.append(titleElement, statusElement, actionsElement, bookmarkListElement);
         }
 
         /**
          * Creates a bookmark row.
          *
-         * @param {{ id: string, title: string, scrollY: number, createdUtc: string }} bookmark
+         * @param {{ id: string, title: string, blockKey: string, createdUtc: string }} bookmark
          * @returns {HTMLDivElement}
          */
         createBookmarkElement(bookmark) {
             const containerElement = document.createElement("div"),
                 titleElement = document.createElement("div"),
+                blockKeyElement = document.createElement("div"),
                 buttonRowElement = document.createElement("div"),
                 goButton = document.createElement("button"),
                 deleteButton = document.createElement("button");
@@ -150,15 +163,15 @@
             titleElement.title = bookmark.title;
             titleElement.textContent = bookmark.title;
 
+            blockKeyElement.className = "mrbr-cvm-bookmark-key";
+            blockKeyElement.textContent = bookmark.blockKey;
+
             buttonRowElement.className = "mrbr-cvm-actions";
 
             goButton.type = "button";
             goButton.textContent = "Go";
             goButton.addEventListener("click", () => {
-                window.scrollTo({
-                    top: bookmark.scrollY,
-                    behavior: "smooth"
-                });
+                this.goToBookmark(bookmark);
             });
 
             deleteButton.type = "button";
@@ -170,28 +183,36 @@
             });
 
             buttonRowElement.append(goButton, deleteButton);
-            containerElement.append(titleElement, buttonRowElement);
+            containerElement.append(titleElement, blockKeyElement, buttonRowElement);
 
             return containerElement;
         }
 
         /**
-         * Adds a bookmark using the current scroll position.
+         * Adds a bookmark for the currently visible conversation block.
          *
          * @returns {Promise<void>}
          */
-        async addBookmark() {
-            const defaultTitle = this.getDefaultBookmarkTitle(),
+        async addBookmarkForVisibleBlock() {
+            const block = this.findBestVisibleBlock();
+
+            if (!block) {
+                alert("No visible conversation block was found.");
+                return;
+            }
+
+            const blockKey = block.getAttribute(ConversationScanner.BLOCK_KEY_ATTRIBUTE),
+                defaultTitle = this.scanner.getBlockTitle(block),
                 title = prompt("Bookmark title", defaultTitle);
 
-            if (!title) {
+            if (!title || !blockKey) {
                 return;
             }
 
             this.state.bookmarks.push({
                 id: crypto.randomUUID(),
                 title,
-                scrollY: window.scrollY,
+                blockKey,
                 createdUtc: new Date().toISOString()
             });
 
@@ -200,24 +221,106 @@
         }
 
         /**
-         * Gets a simple default title based on nearby visible text.
+         * Scrolls to a bookmark's block.
          *
-         * @returns {string}
+         * @param {{ id: string, title: string, blockKey: string, createdUtc: string }} bookmark
+         * @returns {void}
          */
-        getDefaultBookmarkTitle() {
-            const visibleText = document.body.innerText
-                .split("\n")
-                .map(line => line.trim())
-                .filter(Boolean)
-                .find(line => line.length > 20);
+        goToBookmark(bookmark) {
+            this.scanner.findBlocks();
 
-            if (!visibleText) {
-                return "Bookmark";
+            const block = this.scanner.findBlockByKey(bookmark.blockKey);
+
+            if (!block) {
+                alert(`Could not find ${bookmark.blockKey}. Try rescanning after the page has fully loaded.`);
+                return;
             }
 
-            return visibleText.length > 80
-                ? `${visibleText.substring(0, 80)}...`
-                : visibleText;
+            block.scrollIntoView({
+                behavior: "smooth",
+                block: "center"
+            });
+
+            this.flashBlock(block);
+        }
+
+        /**
+         * Finds the most suitable visible block to bookmark.
+         *
+         * @returns {HTMLElement | null}
+         */
+        findBestVisibleBlock() {
+            const blocks = this.scanner.findBlocks(),
+                viewportCenterY = window.innerHeight / 2;
+
+            let bestBlock = null,
+                bestDistance = Number.MAX_VALUE;
+
+            for (const block of blocks) {
+                const rect = block.getBoundingClientRect();
+
+                if (rect.bottom < 0 || rect.top > window.innerHeight) {
+                    continue;
+                }
+
+                const blockCenterY = rect.top + rect.height / 2,
+                    distance = Math.abs(blockCenterY - viewportCenterY);
+
+                if (distance < bestDistance) {
+                    bestBlock = block;
+                    bestDistance = distance;
+                }
+            }
+
+            return bestBlock;
+        }
+
+        /**
+         * Briefly highlights a block after navigation.
+         *
+         * @param {HTMLElement} block
+         * @returns {void}
+         */
+        flashBlock(block) {
+            block.classList.add("mrbr-cvm-flash");
+
+            window.setTimeout(() => {
+                block.classList.remove("mrbr-cvm-flash");
+            }, 1200);
+        }
+
+        /**
+         * Watches for ChatGPT adding/replacing conversation content.
+         *
+         * @returns {void}
+         */
+        startMutationObserver() {
+            let pendingAnimationFrame = 0;
+
+            const observer = new MutationObserver(() => {
+                if (pendingAnimationFrame) {
+                    return;
+                }
+
+                pendingAnimationFrame = requestAnimationFrame(() => {
+                    pendingAnimationFrame = 0;
+                    this.scanner.findBlocks();
+
+                    if (this.panelElement) {
+                        const statusElement = this.panelElement.querySelector(".mrbr-cvm-status"),
+                            blockCount = this.scanner.findBlocks().length;
+
+                        if (statusElement) {
+                            statusElement.textContent = `${blockCount} blocks detected`;
+                        }
+                    }
+                });
+            });
+
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
         }
     };
 

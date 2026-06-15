@@ -82,3 +82,20 @@
 .mrbr-cvm-hidden {
     display: none !important;
 }
+.mrbr-cvm-status {
+    margin-bottom: 8px;
+    color: #bbb;
+    font-size: 12px;
+}
+
+.mrbr-cvm-bookmark-key {
+    color: #aaa;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 11px;
+}
+
+.mrbr-cvm-flash {
+    outline: 3px solid #fff !important;
+    outline-offset: 4px !important;
+    transition: outline-color 1.2s ease;
+}
