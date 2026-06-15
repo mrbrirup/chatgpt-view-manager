@@ -50,7 +50,19 @@
      * }} MrbrCvmStorageRoot
      */
 
-
+    /**
+     * @typedef {new (options: {
+     *     createIconButton: (options: {
+     *         iconName: string,
+     *         title: string,
+     *         onClick: (event: MouseEvent) => void
+     *     }) => HTMLButtonElement,
+     *     onImport: () => void | Promise<void>,
+     *     onExport: () => void | Promise<void>,
+     *     onSetTheme: (theme: "auto" | "dark" | "light") => void | Promise<void>,
+     *     getCurrentTheme: () => "auto" | "dark" | "light"
+     * }) => ViewManagerActionsDropdown} ViewManagerActionsDropdownConstructor
+     */
 
     /**
      * Gets the ConversationScanner constructor loaded by conversationScanner.js.
@@ -68,6 +80,26 @@
     };
 
     const ConversationScanner = getConversationScannerConstructor();
+
+
+
+    /**
+     * Gets the ViewManagerActionsDropdown constructor.
+     *
+     * @returns {ViewManagerActionsDropdownConstructor}
+     */
+    const getActionsDropdownConstructor = () => {
+        const actionsDropdown = window.MrbrCvm?.ViewManagerActionsDropdown;
+
+        if (!actionsDropdown) {
+            throw new Error("ChatGPT View Manager failed to load ViewManagerActionsDropdown.");
+        }
+
+        return actionsDropdown;
+    };
+
+    const ViewManagerActionsDropdown = getActionsDropdownConstructor();
+
 
     if (!ConversationScanner) {
         throw new Error("ChatGPT View Manager failed to load ConversationScanner.");
@@ -130,6 +162,11 @@
          * @type {string}
          */
         conversationKey = "";
+
+        /**
+         * @type {ViewManagerActionsDropdown | null}
+         */
+        actionsDropdown = null;
 
         /**
          * @type {{
@@ -487,7 +524,10 @@
                     this.renderCollapsedPanel();
                     return;
                 }
-
+                if (this.actionsDropdown) {
+                    this.actionsDropdown.dispose();
+                    this.actionsDropdown = null;
+                }
                 this.panelElement.innerHTML = "";
                 this.panelElement.classList.remove("mrbr-cvm-panel-collapsed");
 
@@ -687,13 +727,28 @@
          */
         createToolbarElement() {
             const toolbarElement = document.createElement("div"),
-                actionGroupElement = document.createElement("div"),
-                themeGroupElement = document.createElement("div");
+                actionGroupElement = document.createElement("div");
+
+            this.actionsDropdown = new ViewManagerActionsDropdown({
+                createIconButton: options => this.createIconButton({
+                    iconName: /** @type {any} */ (options.iconName),
+                    title: options.title,
+                    onClick: options.onClick
+                }),
+                onExport: () => {
+                    this.exportState();
+                },
+                onImport: () => {
+                    this.importState();
+                },
+                onSetTheme: theme => {
+                    this.setTheme(theme);
+                },
+                getCurrentTheme: () => this.state.ui.theme
+            });
 
             toolbarElement.className = "mrbr-cvm-toolbar";
-
             actionGroupElement.className = "mrbr-cvm-icon-toolbar";
-            themeGroupElement.className = "mrbr-cvm-theme-toggle-group";
 
             actionGroupElement.append(
                 this.createIconButton({
@@ -704,39 +759,23 @@
                     }
                 }),
                 this.createIconButton({
-                    iconName: "rescan",
-                    title: "Rescan conversation blocks",
+                    iconName: "collapse",
+                    title: "Collapse highlighted block",
+                    onMouseEnter: () => {
+                        this.highlightCollapseTarget();
+                    },
+                    onMouseLeave: () => {
+                        this.clearCollapseTargetHighlight();
+                    },
                     onClick: () => {
-                        this.scheduleDomUpdate(() => {
-                            const rescannedBlocks = this.scanner.findBlocks();
-
-                            this.applyCollapsedBlocks(rescannedBlocks);
-                            this.updateBlockCountStatus(rescannedBlocks.length);
-                        });
+                        this.collapseHighlightedBlock();
                     }
                 }),
                 this.createIconButton({
-                    iconName: "exportState",
-                    title: "Export View Manager data",
+                    iconName: "restore",
+                    title: "Restore all collapsed blocks",
                     onClick: () => {
-                        this.exportState();
-                    }
-                }),
-                this.createIconButton({
-                    iconName: "importState",
-                    title: "Import View Manager data",
-                    onClick: () => {
-                        this.importState();
-                    }
-                }),
-                this.createIconButton({
-                    iconName: "top",
-                    title: "Scroll to top",
-                    onClick: () => {
-                        window.scrollTo({
-                            top: 0,
-                            behavior: "smooth"
-                        });
+                        this.restoreAllBlocks();
                     }
                 }),
                 this.createIconButton({
@@ -760,30 +799,10 @@
                             behavior: "smooth"
                         });
                     }
-                }),
-                this.createIconButton({
-                    iconName: "exportState",
-                    title: "Export View Manager data",
-                    onClick: () => {
-                        this.exportState();
-                    }
-                }),
-                this.createIconButton({
-                    iconName: "importState",
-                    title: "Import View Manager data",
-                    onClick: () => {
-                        this.importState();
-                    }
-                }),
+                })
             );
 
-            themeGroupElement.append(
-                this.createThemeToggleButton("light"),
-                this.createThemeToggleButton("dark"),
-                this.createThemeToggleButton("auto")
-            );
-
-            toolbarElement.append(actionGroupElement, themeGroupElement);
+            toolbarElement.append(actionGroupElement, this.actionsDropdown.createElement());
 
             return toolbarElement;
         }
@@ -1651,7 +1670,7 @@
         /**
  * Gets the SVG path data for an icon.
  *
- * @param {"bookmark" | "collapse" | "restore" | "rescan" | "top" | "go" | "delete" | "expandPanel" | "collapsePanel"| "lightTheme" | "darkTheme" | "autoTheme" | "exportState" | "importState"} iconName
+ * @param {"bookmark" | "collapse" | "restore" | "rescan" | "top" | "go" | "delete" | "expandPanel" | "collapsePanel"| "lightTheme" | "darkTheme" | "autoTheme" | "exportState" | "importState" | "more"} iconName
  * @returns {string}
  */
         getIconPath(iconName) {
@@ -1687,6 +1706,8 @@
 
                 case "importState":
                     return "M10 3h4v6h3l-5 5-5-5h3V3zm-5 13h2v3h10v-3h2v5H5v-5z";
+                case "more":
+                    return "M6 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4z";
                 default:
                     return "";
             }
@@ -1695,7 +1716,7 @@
         /**
          * Creates an SVG icon element.
          *
-         * @param {"bookmark" | "collapse" | "restore" | "rescan" | "top" | "go" | "delete" | "expandPanel" | "collapsePanel"| "lightTheme" | "darkTheme" | "autoTheme" | "exportState" | "importState"} iconName
+         * @param {"bookmark" | "collapse" | "restore" | "rescan" | "top" | "go" | "delete" | "expandPanel" | "collapsePanel"| "lightTheme" | "darkTheme" | "autoTheme" | "exportState" | "importState" | "more"} iconName
          * @returns {SVGSVGElement}
          */
         createIconElement(iconName) {
@@ -1719,7 +1740,7 @@
          * Creates a compact icon button.
          *
          * @param {{
-         *     iconName: "bookmark" | "collapse" | "restore" | "rescan" | "top" | "go" | "delete" | "expandPanel" | "collapsePanel" | "lightTheme" | "darkTheme" | "autoTheme" | "exportState" | "importState", 
+         *     iconName: "bookmark" | "collapse" | "restore" | "rescan" | "top" | "go" | "delete" | "expandPanel" | "collapsePanel" | "lightTheme" | "darkTheme" | "autoTheme" | "exportState" | "importState" | "more", 
          *     title: string,
          *     onClick: (event: MouseEvent) => void,
          *     onMouseEnter?: (event: MouseEvent) => void,

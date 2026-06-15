@@ -13,6 +13,7 @@ declare global {
     interface Window {
         MrbrCvm?: {
             ConversationScanner?: typeof ConversationScanner;
+            ViewManagerActionsDropdown?: typeof ViewManagerActionsDropdown;
         };
     }
 
@@ -42,4 +43,20 @@ declare global {
         getBlockTitle(block: HTMLElement): string;
     }
 
+    class ViewManagerActionsDropdown {
+        constructor(options: {
+            createIconButton: (options: {
+                iconName: string;
+                title: string;
+                onClick: (event: MouseEvent) => void;
+            }) => HTMLButtonElement;
+            onImport: () => void | Promise<void>;
+            onExport: () => void | Promise<void>;
+            onSetTheme: (theme: "auto" | "dark" | "light") => void | Promise<void>;
+            getCurrentTheme: () => "auto" | "dark" | "light";
+        });
+
+        createElement(): HTMLDivElement;
+        dispose(): void;
+    }
 }
