@@ -119,7 +119,27 @@
             domUpdateFailed: "ChatGPT View Manager DOM update failed.",
             startupFailed: "ChatGPT View Manager failed to start.",
             importFileReadFailed: "Failed to read import file.",
-            importJsonParseFailed: "View Manager import JSON parse failed."
+            importJsonParseFailed: "View Manager import JSON parse failed.",
+
+            editBookmark: "Edit bookmark",
+            editBookmarkTitle: "Edit bookmark",
+            bookmarkLabel: "Bookmark label",
+            bookmarkNotes: "Notes",
+            saveChanges: "Save changes",
+            notesEmptyPlaceholder: "Optional notes for this bookmark",
+
+            editCollapsedBlockNotes: "Edit collapsed block notes",
+            collapsedBlockNotesTitle: "Collapsed block notes",
+            sectionCollapse: "Collapse section",
+            sectionExpand: "Expand section",
+            hasNotes: "Has notes",
+            noNotes: "No notes",
+            expandCollapsedBlock: "Expand collapsed block",
+            
+            bookmarkFallbackTitle: "Bookmark",
+            bookmarkFallbackTitleWithIndex: "Bookmark {0}",
+
+
         };
     }
 

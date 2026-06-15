@@ -56,10 +56,18 @@
 
                 case "importState":
                     return "M10 3h4v6h3l-5 5-5-5h3V3zm-5 13h2v3h10v-3h2v5H5v-5z";
-
                 case "more":
                     return "M6 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm6 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4z";
+                case "edit":
+                    return "M4 17.25V21h3.75L18.8 9.95l-3.75-3.75L4 17.25zM20.7 8.05a1 1 0 0 0 0-1.4l-2.35-2.35a1 1 0 0 0-1.4 0l-1.1 1.1 3.75 3.75 1.1-1.1z";
+                case "note":
+                    return "M5 4h14v16H5V4zm2 2v12h10V6H7zm2 2h6v2H9V8zm0 4h6v2H9v-2z";
 
+                case "sectionExpanded":
+                    return "M7 10l5 5 5-5H7z";
+
+                case "sectionCollapsed":
+                    return "M10 7l5 5-5 5V7z";
                 default:
                     return "";
             }

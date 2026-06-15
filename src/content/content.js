@@ -6,16 +6,18 @@
     */
 
     /**
-    * @typedef {{
-    *     id: string,
-    *     title: string,
-    *     blockKey: string,
-    *     blockIndex?: number,
-    *     role?: string,
-    *     contentHash?: string,
-    *     createdUtc: string
-    * }} MrbrCvmBookmark
-    */
+     * @typedef {{
+     *     id: string,
+     *     title: string,
+     *     notes?: string,
+     *     blockKey: string,
+     *     blockIndex?: number,
+     *     role?: string,
+     *     contentHash?: string,
+     *     createdUtc: string,
+     *     updatedUtc?: string
+     * }} MrbrCvmBookmark
+     */
 
     /**
      * @typedef {{
@@ -24,7 +26,9 @@
      *     role?: string,
      *     contentHash?: string,
      *     title: string,
-     *     collapsedUtc: string
+     *     notes?: string,
+     *     collapsedUtc: string,
+     *     updatedUtc?: string
      * }} MrbrCvmCollapsedBlock
      */
 
@@ -176,11 +180,15 @@
 
         /**
          * @type {{
-         *     bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }>,
+         *     bookmarks: Array<{ id: string, title: string, notes?: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string, updatedUtc?: string }>,
          *     collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>,
          *     ui: {
          *         theme: "auto" | "dark" | "light",
-         *         isPanelCollapsed: boolean
+         *         isPanelCollapsed: boolean,
+         *         collapsedSections: {
+         *             bookmarks: boolean,
+         *             collapsedBlocks: boolean
+         *         }
          *     }
          * }}
          */
@@ -236,7 +244,7 @@
          *         isPanelCollapsed: boolean
          *     },
          *     conversations: Record<string, {
-         *         bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }>,
+         *         bookmarks: Array<{ id: string, title: string, notes?: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string, updatedUtc?: string }>,
          *         collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
          *     }>
          * }}
@@ -403,7 +411,7 @@
          * Gets a blank per-conversation state object.
          *
          * @returns {{
-         *     bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }>,
+         *     bookmarks: Array<{ id: string, title: string, notes?: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string, updatedUtc?: string }>,
          *     collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
          * }}
          */
@@ -418,14 +426,25 @@
          * Gets a safe UI state.
          *
          * @param {any} ui
-         * @returns {{ theme: "auto" | "dark" | "light", isPanelCollapsed: boolean }}
+         * @returns {{
+         *     theme: "auto" | "dark" | "light",
+         *     isPanelCollapsed: boolean,
+         *     collapsedSections: {
+         *         bookmarks: boolean,
+         *         collapsedBlocks: boolean
+         *     }
+         * }}
          */
         normalizeUiState(ui) {
             return {
                 theme: ui?.theme === "dark" || ui?.theme === "light" || ui?.theme === "auto"
                     ? ui.theme
                     : "auto",
-                isPanelCollapsed: ui?.isPanelCollapsed === true
+                isPanelCollapsed: ui?.isPanelCollapsed === true,
+                collapsedSections: {
+                    bookmarks: ui?.collapsedSections?.bookmarks === true,
+                    collapsedBlocks: ui?.collapsedSections?.collapsedBlocks === true
+                }
             };
         }
 
@@ -433,18 +452,37 @@
          * Normalises a saved conversation state.
          *
          * @param {any} conversationState
-         * @returns {{
-         *     bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }>,
-         *     collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
-         * }}
+         * @returns {MrbrCvmConversationState}
          */
         normalizeConversationState(conversationState) {
             return {
                 bookmarks: Array.isArray(conversationState?.bookmarks)
-                    ? conversationState.bookmarks
+                    ? conversationState.bookmarks.map(/** @param {any} bookmark */ bookmark => ({
+                        ...bookmark,
+                        title: typeof bookmark.title === "string"
+                            ? bookmark.title
+                            : "",
+                        notes: typeof bookmark.notes === "string"
+                            ? bookmark.notes
+                            : "",
+                        updatedUtc: typeof bookmark.updatedUtc === "string"
+                            ? bookmark.updatedUtc
+                            : undefined
+                    }))
                     : [],
                 collapsedBlocks: Array.isArray(conversationState?.collapsedBlocks)
-                    ? conversationState.collapsedBlocks
+                    ? conversationState.collapsedBlocks.map(/** @param {any} collapsedBlock */ collapsedBlock => ({
+                        ...collapsedBlock,
+                        title: typeof collapsedBlock.title === "string" && collapsedBlock.title.trim()
+                            ? collapsedBlock.title
+                            : "",
+                        notes: typeof collapsedBlock.notes === "string"
+                            ? collapsedBlock.notes
+                            : "",
+                        updatedUtc: typeof collapsedBlock.updatedUtc === "string"
+                            ? collapsedBlock.updatedUtc
+                            : undefined
+                    }))
                     : []
             };
         }
@@ -628,6 +666,31 @@
             });
         }
         /**
+         * Gets a safe display title for a collapsed block.
+         *
+         * @param {MrbrCvmCollapsedBlock} collapsedBlock
+         * @returns {string}
+         */
+        getCollapsedBlockTitle(collapsedBlock) {
+            if (collapsedBlock.title && collapsedBlock.title.trim()) {
+                return collapsedBlock.title.trim();
+            }
+
+            if (collapsedBlock.role && typeof collapsedBlock.blockIndex === "number") {
+                return `${collapsedBlock.role} block ${collapsedBlock.blockIndex + 1}`;
+            }
+
+            if (collapsedBlock.role) {
+                return `${collapsedBlock.role} block`;
+            }
+
+            if (typeof collapsedBlock.blockIndex === "number") {
+                return `Collapsed block ${collapsedBlock.blockIndex + 1}`;
+            }
+
+            return "Collapsed block";
+        }
+        /**
          * Creates the collapsed blocks management section.
          *
          * @returns {HTMLDivElement}
@@ -650,16 +713,22 @@
                 }
             }
 
-            return this.createCompactSectionElement(this.getString("collapsedBlocksSectionTitle"), this.state.collapsedBlocks.length, listElement);
+            return this.createCompactSectionElement(
+                "collapsedBlocks",
+                this.getString("collapsedBlocksSectionTitle"),
+                this.state.collapsedBlocks.length,
+                listElement
+            );
         }
         /**
-        * Creates one compact collapsed block management row.
-        *
-        * @param {{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }} collapsedBlock
-        * @returns {HTMLDivElement}
-        */
+         * Creates a compact collapsed-block row for the View Manager overlay.
+         *
+         * @param {MrbrCvmCollapsedBlock} collapsedBlock
+         * @returns {HTMLDivElement}
+         */
         createCollapsedBlockElement(collapsedBlock) {
             const rowElement = document.createElement("div"),
+                title = this.getCollapsedBlockTitle(collapsedBlock),
                 goButton = this.createIconButton({
                     iconName: "go",
                     title: this.getString("goToCollapsedBlockPlaceholder"),
@@ -674,22 +743,35 @@
                         await this.restoreCollapsedBlock(collapsedBlock);
                     }
                 }),
-                forgetButton = this.createIconButton({
+                deleteButton = this.createIconButton({
                     iconName: "delete",
                     title: this.getString("forgetCollapsedBlockAndRestore"),
                     onClick: async () => {
-                        await this.forgetCollapsedBlock(collapsedBlock);
+                        this.state.collapsedBlocks = this.state.collapsedBlocks.filter(item => {
+                            return item.blockKey !== collapsedBlock.blockKey;
+                        });
+
+                        await this.saveState();
+
+                        this.scheduleDomUpdate(() => {
+                            this.applyCollapsedBlocks();
+                            this.render();
+                        });
                     }
                 }),
-                labelElement = document.createElement("div");
+                labelElement = document.createElement("div"),
+                key = collapsedBlock.blockKey || `${collapsedBlock.role || "unknown"}-${collapsedBlock.blockIndex || "?"}`;
 
-            rowElement.className = "mrbr-cvm-compact-row mrbr-cvm-compact-row-collapsed";
+            rowElement.className = "mrbr-cvm-compact-row";
 
-            labelElement.className = "mrbr-cvm-compact-label";
-            labelElement.textContent = collapsedBlock.title;
-            labelElement.title = `${collapsedBlock.title}\n${collapsedBlock.blockKey}`;
+            labelElement.className = "mrbr-cvm-compact-row-label";
+            labelElement.textContent = title;
 
-            rowElement.append(goButton, restoreButton, forgetButton, labelElement);
+            labelElement.title = collapsedBlock.notes
+                ? `${title}\n\n${collapsedBlock.notes}\n\n${key}`
+                : `${title}\n${key}`;
+
+            rowElement.append(goButton, restoreButton, deleteButton, labelElement);
 
             return rowElement;
         }
@@ -772,12 +854,17 @@
 
                 listElement.append(emptyElement);
             } else {
-                for (const bookmark of this.state.bookmarks) {
-                    listElement.appendChild(this.createBookmarkElement(bookmark));
-                }
+                this.state.bookmarks.forEach((bookmark, index) => {
+                    listElement.append(this.createBookmarkElement(bookmark, index));
+                });
             }
 
-            return this.createCompactSectionElement(this.getString("bookmarksSectionTitle"), this.state.bookmarks.length, listElement);
+            return this.createCompactSectionElement(
+                "bookmarks",
+                this.getString("bookmarksSectionTitle"),
+                this.state.bookmarks.length,
+                listElement
+            );
         }
 
         /**
@@ -1083,16 +1170,25 @@
         /**
          * Creates a compact bookmark row.
          *
-         * @param {{ id: string, title: string, blockKey?: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }} bookmark
+         * @param {MrbrCvmBookmark} bookmark
+         * @param {number} index
          * @returns {HTMLDivElement}
          */
-        createBookmarkElement(bookmark) {
+        createBookmarkElement(bookmark, index) {
             const rowElement = document.createElement("div"),
+                title = this.getBookmarkTitle(bookmark, index),
                 goButton = this.createIconButton({
                     iconName: "go",
                     title: this.getString("goToBookmark"),
                     onClick: () => {
                         this.goToBookmark(bookmark);
+                    }
+                }),
+                editButton = this.createIconButton({
+                    iconName: "edit",
+                    title: this.getString("editBookmark"),
+                    onClick: async () => {
+                        await this.editBookmark(bookmark);
                     }
                 }),
                 deleteButton = this.createIconButton({
@@ -1108,13 +1204,16 @@
                 labelElement = document.createElement("div"),
                 key = bookmark.blockKey || `${bookmark.role || "unknown"}-${bookmark.blockIndex || "?"}`;
 
-            rowElement.className = "mrbr-cvm-compact-row";
+            rowElement.className = "mrbr-cvm-compact-row mrbr-cvm-compact-row-bookmark";
 
-            labelElement.className = "mrbr-cvm-compact-label";
-            labelElement.textContent = bookmark.title;
-            labelElement.title = `${bookmark.title}\n${key}`;
+            labelElement.className = "mrbr-cvm-compact-row-label";
+            labelElement.textContent = title;
 
-            rowElement.append(goButton, deleteButton, labelElement);
+            labelElement.title = bookmark.notes
+                ? `${title}\n\n${bookmark.notes}\n\n${key}`
+                : `${title}\n${key}`;
+
+            rowElement.append(goButton, editButton, deleteButton, labelElement);
 
             return rowElement;
         }
@@ -1150,6 +1249,7 @@
             this.state.bookmarks.push({
                 id: crypto.randomUUID(),
                 title,
+                notes: "",
                 blockKey: identity.blockKey,
                 blockIndex: identity.blockIndex,
                 role: identity.role,
@@ -1174,10 +1274,10 @@
 
             const block = this.scanner.findBlockForBookmark(bookmark);
 
-            if (!block) {
-                alert(this.formatString("couldNotFindBookmark", bookmark.title));
-                return;
-            }
+            alert(this.formatString(
+                "couldNotFindBookmark",
+                this.getBookmarkTitle(bookmark, this.state.bookmarks.indexOf(bookmark))
+            ));
 
             const matchingCollapsedBlock = this.state.collapsedBlocks.find(item => {
                 return item.blockKey === bookmark.blockKey
@@ -1374,6 +1474,7 @@
                     role: identity.role,
                     contentHash: identity.contentHash,
                     title,
+                    notes: "",
                     collapsedUtc: new Date().toISOString()
                 });
             }
@@ -1434,32 +1535,44 @@
         /**
          * Creates a collapsed block placeholder.
          *
-         * @param {{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }} collapsedBlock
+         * @param {MrbrCvmCollapsedBlock} collapsedBlock
          * @returns {HTMLDivElement}
          */
         createCollapsePlaceholder(collapsedBlock) {
             const containerElement = document.createElement("div"),
-                titleElement = document.createElement("div"),
-                metaElement = document.createElement("div"),
-                restoreButton = document.createElement("button");
+                title = this.getCollapsedBlockTitle(collapsedBlock),
+                expandButton = this.createIconButton({
+                    iconName: "restore",
+                    title: this.getString("expandCollapsedBlock"),
+                    onClick: async () => {
+                        await this.restoreCollapsedBlock(collapsedBlock);
+                    }
+                }),
+                noteButton = this.createIconButton({
+                    iconName: "note",
+                    title: collapsedBlock.notes
+                        ? `${this.getString("hasNotes")}: ${collapsedBlock.notes}`
+                        : this.getString("noNotes"),
+                    onClick: async () => {
+                        await this.editCollapsedBlockNotes(collapsedBlock);
+                    }
+                }),
+                titleElement = document.createElement("div");
 
             containerElement.className = "mrbr-cvm-collapsed-placeholder";
             containerElement.setAttribute("data-mrbr-cvm-placeholder-key", collapsedBlock.blockKey);
 
-            titleElement.className = "mrbr-cvm-collapsed-title";
-            titleElement.title = collapsedBlock.title;
-            titleElement.textContent = this.formatString("collapsedPrefix", collapsedBlock.title);
+            if (collapsedBlock.notes) {
+                noteButton.classList.add("mrbr-cvm-note-button-active");
+            }
 
-            metaElement.className = "mrbr-cvm-collapsed-meta";
-            metaElement.textContent = collapsedBlock.blockKey;
+            titleElement.className = "mrbr-cvm-collapsed-placeholder-title";
+            titleElement.title = collapsedBlock.notes
+                ? `${title}\n\n${collapsedBlock.notes}\n\n${collapsedBlock.blockKey}`
+                : `${title}\n${collapsedBlock.blockKey}`;
+            titleElement.textContent = title;
 
-            restoreButton.type = "button";
-            restoreButton.textContent = this.getString("restoreCollapsedBlock");
-            restoreButton.addEventListener("click", async () => {
-                await this.restoreCollapsedBlock(collapsedBlock);
-            });
-
-            containerElement.append(titleElement, metaElement, restoreButton);
+            containerElement.append(expandButton, noteButton, titleElement);
 
             return containerElement;
         }
@@ -1744,22 +1857,38 @@
             return this.iconButtonFactory.createIconButton(options);
         }
         /**
-        * Creates a compact panel section with a title, count, and content.
-        *
-        * @param {string} title
-        * @param {number} count
-        * @param {HTMLElement} contentElement
-        * @returns {HTMLDivElement}
-        */
-        createCompactSectionElement(title, count, contentElement) {
+         * Creates a compact collapsible panel section with a title, count, and content.
+         *
+         * @param {"bookmarks" | "collapsedBlocks"} sectionKey
+         * @param {string} title
+         * @param {number} count
+         * @param {HTMLElement} contentElement
+         * @returns {HTMLDivElement}
+         */
+        createCompactSectionElement(sectionKey, title, count, contentElement) {
             const sectionElement = document.createElement("div"),
                 headerElement = document.createElement("div"),
+                headerLeftElement = document.createElement("div"),
+                toggleButton = this.createIconButton({
+                    iconName: this.state.ui.collapsedSections[sectionKey]
+                        ? "sectionCollapsed"
+                        : "sectionExpanded",
+                    title: this.state.ui.collapsedSections[sectionKey]
+                        ? this.getString("sectionExpand")
+                        : this.getString("sectionCollapse"),
+                    onClick: async () => {
+                        await this.toggleSectionCollapsed(sectionKey);
+                    }
+                }),
                 titleElement = document.createElement("div"),
                 countElement = document.createElement("div");
 
             sectionElement.className = "mrbr-cvm-section";
 
             headerElement.className = "mrbr-cvm-section-header";
+            headerLeftElement.className = "mrbr-cvm-section-header-left";
+
+            toggleButton.classList.add("mrbr-cvm-section-toggle-button");
 
             titleElement.className = "mrbr-cvm-section-title";
             titleElement.textContent = title;
@@ -1767,8 +1896,13 @@
             countElement.className = "mrbr-cvm-section-count";
             countElement.textContent = String(count);
 
-            headerElement.append(titleElement, countElement);
-            sectionElement.append(headerElement, contentElement);
+            headerLeftElement.append(toggleButton, titleElement);
+            headerElement.append(headerLeftElement, countElement);
+            sectionElement.append(headerElement);
+
+            if (!this.state.ui.collapsedSections[sectionKey]) {
+                sectionElement.append(contentElement);
+            }
 
             return sectionElement;
         }
@@ -1841,7 +1975,245 @@
             return text;
         }
 
-    };
+        /**
+         * Shows an editor dialog for a title and notes.
+         *
+         * @param {{
+         *     dialogTitle: string,
+         *     titleLabel: string,
+         *     notesLabel: string,
+         *     title: string,
+         *     notes?: string,
+         *     allowEmptyTitle?: boolean
+         * }} options
+         * @returns {Promise<{ title: string, notes: string } | null>}
+         */
+        showTitleNotesEditorDialog(options) {
+            return new Promise(resolve => {
+                const backdropElement = document.createElement("div"),
+                    dialogElement = document.createElement("div"),
+                    headingElement = document.createElement("h2"),
+                    titleLabelElement = document.createElement("label"),
+                    titleInputElement = document.createElement("input"),
+                    notesLabelElement = document.createElement("label"),
+                    notesTextAreaElement = document.createElement("textarea"),
+                    actionsElement = document.createElement("div"),
+                    cancelButton = document.createElement("button"),
+                    saveButton = document.createElement("button"),
+                    dialogId = `mrbr-cvm-dialog-${crypto.randomUUID()}`,
+                    titleInputId = `${dialogId}-title`,
+                    notesInputId = `${dialogId}-notes`;
+
+                let isResolved = false;
+
+                const closeDialog = value => {
+                    if (isResolved) {
+                        return;
+                    }
+
+                    isResolved = true;
+                    document.removeEventListener("keydown", handleDocumentKeyDown, true);
+                    backdropElement.remove();
+                    resolve(value);
+                };
+
+                const save = () => {
+                    const title = titleInputElement.value.trim(),
+                        notes = notesTextAreaElement.value.trim();
+
+                    if (!options.allowEmptyTitle && !title) {
+                        titleInputElement.focus();
+                        return;
+                    }
+
+                    closeDialog({
+                        title,
+                        notes
+                    });
+                };
+
+                /**
+                 * @param {KeyboardEvent} event
+                 * @returns {void}
+                 */
+                const handleDocumentKeyDown = event => {
+                    if (event.key === "Escape") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        closeDialog(null);
+                        return;
+                    }
+
+                    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                        event.preventDefault();
+                        save();
+                    }
+                };
+
+                backdropElement.className = "mrbr-cvm-dialog-backdrop";
+
+                dialogElement.className = "mrbr-cvm-dialog";
+                dialogElement.setAttribute("role", "dialog");
+                dialogElement.setAttribute("aria-modal", "true");
+                dialogElement.setAttribute("aria-labelledby", dialogId);
+
+                headingElement.id = dialogId;
+                headingElement.className = "mrbr-cvm-dialog-title";
+                headingElement.textContent = options.dialogTitle;
+
+                titleLabelElement.className = "mrbr-cvm-dialog-label";
+                titleLabelElement.htmlFor = titleInputId;
+                titleLabelElement.textContent = options.titleLabel;
+
+                titleInputElement.id = titleInputId;
+                titleInputElement.className = "mrbr-cvm-dialog-input";
+                titleInputElement.type = "text";
+                titleInputElement.value = options.title;
+
+                notesLabelElement.className = "mrbr-cvm-dialog-label";
+                notesLabelElement.htmlFor = notesInputId;
+                notesLabelElement.textContent = options.notesLabel;
+
+                notesTextAreaElement.id = notesInputId;
+                notesTextAreaElement.className = "mrbr-cvm-dialog-textarea";
+                notesTextAreaElement.value = options.notes || "";
+                notesTextAreaElement.placeholder = this.getString("notesEmptyPlaceholder");
+
+                actionsElement.className = "mrbr-cvm-dialog-actions";
+
+                cancelButton.type = "button";
+                cancelButton.textContent = this.getString("cancel");
+                cancelButton.addEventListener("click", () => {
+                    closeDialog(null);
+                });
+
+                saveButton.type = "button";
+                saveButton.textContent = this.getString("saveChanges");
+                saveButton.addEventListener("click", save);
+
+                backdropElement.addEventListener("click", event => {
+                    if (event.target === backdropElement) {
+                        closeDialog(null);
+                    }
+                });
+
+                document.addEventListener("keydown", handleDocumentKeyDown, true);
+
+                actionsElement.append(cancelButton, saveButton);
+                dialogElement.append(
+                    headingElement,
+                    titleLabelElement,
+                    titleInputElement,
+                    notesLabelElement,
+                    notesTextAreaElement,
+                    actionsElement
+                );
+                backdropElement.append(dialogElement);
+
+                this.scheduleDomUpdate(() => {
+                    document.documentElement.append(backdropElement);
+
+                    window.requestAnimationFrame(() => {
+                        titleInputElement.focus();
+                        titleInputElement.select();
+                    });
+                });
+            });
+        }
+        /**
+        * Edits an existing bookmark.
+        *
+        * @param {MrbrCvmBookmark} bookmark
+        * @returns {Promise<void>}
+        */
+        async editBookmark(bookmark) {
+            const result = await this.showTitleNotesEditorDialog({
+                dialogTitle: this.getString("editBookmarkTitle"),
+                titleLabel: this.getString("bookmarkLabel"),
+                notesLabel: this.getString("bookmarkNotes"),
+                title: this.getBookmarkTitle(bookmark, this.state.bookmarks.indexOf(bookmark)),
+                notes: bookmark.notes || ""
+            });
+
+            if (!result || !result.title) {
+                return;
+            }
+
+            const existingBookmark = this.state.bookmarks.find(item => item.id === bookmark.id);
+
+            if (!existingBookmark) {
+                return;
+            }
+
+            existingBookmark.title = result.title;
+            existingBookmark.notes = result.notes;
+            existingBookmark.updatedUtc = new Date().toISOString();
+
+            await this.saveState();
+            this.render();
+        }
+        /**
+        * Edits notes for a collapsed block.
+        *
+        * @param {MrbrCvmCollapsedBlock} collapsedBlock
+        * @returns {Promise<void>}
+        */
+        async editCollapsedBlockNotes(collapsedBlock) {
+            const result = await this.showTitleNotesEditorDialog({
+                dialogTitle: this.getString("collapsedBlockNotesTitle"),
+                titleLabel: this.getString("bookmarkLabel"),
+                notesLabel: this.getString("bookmarkNotes"),
+                title: collapsedBlock.title,
+                notes: collapsedBlock.notes || ""
+            });
+
+            if (!result || !result.title) {
+                return;
+            }
+
+            const existingCollapsedBlock = this.state.collapsedBlocks.find(item => {
+                return item.blockKey === collapsedBlock.blockKey;
+            });
+
+            if (!existingCollapsedBlock) {
+                return;
+            }
+
+            existingCollapsedBlock.title = result.title;
+            existingCollapsedBlock.notes = result.notes;
+            existingCollapsedBlock.updatedUtc = new Date().toISOString();
+
+            await this.saveState();
+            this.render();
+        }
+        /**
+         * Toggles a View Manager section collapsed state.
+         *
+         * @param {"bookmarks" | "collapsedBlocks"} sectionKey
+         * @returns {Promise<void>}
+         */
+        async toggleSectionCollapsed(sectionKey) {
+            this.state.ui.collapsedSections[sectionKey] = !this.state.ui.collapsedSections[sectionKey];
+
+            await this.saveState();
+            this.render();
+        }
+
+        /**
+        * Gets a safe display title for a bookmark.
+        *
+        * @param {MrbrCvmBookmark} bookmark
+        * @param {number} index
+        * @returns {string}
+        */
+        getBookmarkTitle(bookmark, index) {
+            if (bookmark.title && bookmark.title.trim()) {
+                return bookmark.title.trim();
+            }
+
+            return this.formatString("bookmarkFallbackTitleWithIndex", index + 1);
+        }
+    }; // End of class: MrbrChatGptViewManager
 
 
 
