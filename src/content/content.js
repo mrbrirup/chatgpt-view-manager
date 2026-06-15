@@ -34,16 +34,35 @@
         pendingCollapseBlock = null;
 
         /**
+        * @type {number}
+        */
+        mutationRefreshTimeoutId = 0;
+
+        /**
+         * @type {number}
+         */
+        domUpdateAnimationFrameId = 0;
+
+        /**
+         * @type {Array<() => void>}
+         */
+        pendingDomUpdateCallbacks = [];
+
+
+        /**
          * Starts the extension content script.
          *
          * @returns {Promise<void>}
          */
         async start() {
             await this.loadState();
-            this.scanner.findBlocks();
-            this.createPanel();
-            this.render();
-            this.startMutationObserver();
+
+            this.scheduleDomUpdate(() => {
+                this.scanner.findBlocks();
+                this.createPanel();
+                this.render();
+                this.startMutationObserver();
+            });
         }
 
         /**
@@ -143,81 +162,77 @@
          * @returns {void}
          */
         render() {
-            if (!this.panelElement) {
-                return;
-            }
+            this.scheduleDomUpdate(() => {
+                if (!this.panelElement) {
+                    return;
+                }
 
-            this.panelElement.innerHTML = "";
+                this.panelElement.innerHTML = "";
 
-            const titleElement = document.createElement("h2"),
-                statusElement = document.createElement("div"),
-                actionsElement = document.createElement("div"),
-                addBookmarkButton = document.createElement("button"),
-                collapseVisibleButton = document.createElement("button"),
-                restoreAllButton = document.createElement("button"),
-                rescanButton = document.createElement("button"),
-                topButton = document.createElement("button"),
-                bookmarkListElement = document.createElement("div"),
-                blocks = this.scanner.findBlocks();
+                const titleElement = document.createElement("h2"),
+                    statusElement = document.createElement("div"),
+                    actionsElement = document.createElement("div"),
+                    addBookmarkButton = document.createElement("button"),
+                    collapseVisibleButton = document.createElement("button"),
+                    restoreAllButton = document.createElement("button"),
+                    rescanButton = document.createElement("button"),
+                    topButton = document.createElement("button"),
+                    bookmarkListElement = document.createElement("div"),
+                    blocks = this.scanner.findBlocks();
 
+                titleElement.textContent = "View Manager";
 
+                statusElement.className = "mrbr-cvm-status";
+                statusElement.textContent = `${blocks.length} blocks detected`;
 
+                actionsElement.className = "mrbr-cvm-actions";
 
+                addBookmarkButton.type = "button";
+                addBookmarkButton.textContent = "Bookmark visible";
+                addBookmarkButton.addEventListener("click", this.addBookmarkForVisibleBlock.bind(this));
 
-            titleElement.textContent = "View Manager";
+                collapseVisibleButton.type = "button";
+                collapseVisibleButton.textContent = "Collapse Highlighted";
+                collapseVisibleButton.addEventListener("mouseenter", this.highlightCollapseTarget.bind(this));
+                collapseVisibleButton.addEventListener("mouseleave", this.clearCollapseTargetHighlight.bind(this));
+                collapseVisibleButton.addEventListener("click", this.collapseHighlightedBlock.bind(this));
 
-            statusElement.className = "mrbr-cvm-status";
-            statusElement.textContent = `${blocks.length} blocks detected`;
+                restoreAllButton.type = "button";
+                restoreAllButton.textContent = "Restore all";
+                restoreAllButton.addEventListener("click", this.restoreAllBlocks.bind(this));
 
-            actionsElement.className = "mrbr-cvm-actions";
+                rescanButton.type = "button";
+                rescanButton.textContent = "Rescan";
+                rescanButton.addEventListener("click", () => {
+                    this.scheduleDomUpdate(() => {
+                        const rescannedBlocks = this.scanner.findBlocks();
 
-            addBookmarkButton.type = "button";
-            collapseVisibleButton.textContent = "Collapse Highlighted";
-            collapseVisibleButton.addEventListener("mouseenter", this.highlightCollapseTarget.bind(this));
-            collapseVisibleButton.addEventListener("mouseleave", this.clearCollapseTargetHighlight.bind(this));
-            collapseVisibleButton.addEventListener("click", this.collapseHighlightedBlock.bind(this));
-
-
-            addBookmarkButton.type = "button";
-            addBookmarkButton.textContent = "Bookmark visible";
-            addBookmarkButton.addEventListener("click", this.addBookmarkForVisibleBlock.bind(this));
-
-            collapseVisibleButton.type = "button";
-            collapseVisibleButton.textContent = "Collapse visible";
-            collapseVisibleButton.addEventListener("click", this.collapseVisibleBlock.bind(this));
-
-            restoreAllButton.type = "button";
-            restoreAllButton.textContent = "Restore all";
-            restoreAllButton.addEventListener("click", this.restoreAllBlocks.bind(this));
-
-
-            rescanButton.type = "button";
-            rescanButton.textContent = "Rescan";
-            rescanButton.addEventListener("click", () => {
-                this.scanner.findBlocks();
-                this.render();
-            });
-
-            topButton.type = "button";
-            topButton.textContent = "Top";
-            topButton.addEventListener("click", () => {
-                window.scrollTo({
-                    top: 0,
-                    behavior: "smooth"
+                        this.applyCollapsedBlocks(rescannedBlocks);
+                        this.updateBlockCountStatus(rescannedBlocks.length);
+                    });
                 });
+
+                topButton.type = "button";
+                topButton.textContent = "Top";
+                topButton.addEventListener("click", () => {
+                    window.scrollTo({
+                        top: 0,
+                        behavior: "smooth"
+                    });
+                });
+
+                bookmarkListElement.className = "mrbr-cvm-bookmarks";
+
+                for (const bookmark of this.state.bookmarks) {
+                    bookmarkListElement.appendChild(this.createBookmarkElement(bookmark));
+                }
+
+                actionsElement.append(addBookmarkButton, collapseVisibleButton, restoreAllButton, rescanButton, topButton);
+                this.panelElement.append(titleElement, statusElement, actionsElement, bookmarkListElement);
+
+                this.applyCollapsedBlocks(blocks);
             });
-
-            bookmarkListElement.className = "mrbr-cvm-bookmarks";
-
-            for (const bookmark of this.state.bookmarks) {
-                bookmarkListElement.appendChild(this.createBookmarkElement(bookmark));
-            }
-
-            actionsElement.append(addBookmarkButton, collapseVisibleButton, restoreAllButton, rescanButton, topButton);
-            this.panelElement.append(titleElement, statusElement, actionsElement, bookmarkListElement);
-            this.applyCollapsedBlocks();
         }
-
         /**
          * Creates a bookmark row.
          *
@@ -333,22 +348,28 @@
                     return item.blockKey !== matchingCollapsedBlock.blockKey;
                 });
 
-                const placeholder = this.findCollapsePlaceholder(matchingCollapsedBlock);
-
-                if (placeholder) {
-                    placeholder.remove();
-                }
-
-                block.classList.remove("mrbr-cvm-collapsed-block");
                 this.saveState();
+
+                this.scheduleDomUpdate(() => {
+                    const placeholder = this.findCollapsePlaceholder(matchingCollapsedBlock);
+
+                    if (placeholder) {
+                        placeholder.remove();
+                    }
+
+                    block.classList.remove("mrbr-cvm-collapsed-block");
+                    this.render();
+                });
             }
 
-            block.scrollIntoView({
-                behavior: "smooth",
-                block: "center"
-            });
+            this.scheduleDomUpdate(() => {
+                block.scrollIntoView({
+                    behavior: "smooth",
+                    block: "center"
+                });
 
-            this.flashBlock(block);
+                this.flashBlock(block);
+            });
         }
 
         /**
@@ -389,11 +410,15 @@
          * @returns {void}
          */
         flashBlock(block) {
-            block.classList.add("mrbr-cvm-flash");
+            this.scheduleDomUpdate(() => {
+                block.classList.add("mrbr-cvm-flash");
 
-            window.setTimeout(() => {
-                block.classList.remove("mrbr-cvm-flash");
-            }, 1200);
+                window.setTimeout(() => {
+                    this.scheduleDomUpdate(() => {
+                        block.classList.remove("mrbr-cvm-flash");
+                    });
+                }, 1200);
+            });
         }
 
         /**
@@ -402,27 +427,8 @@
          * @returns {void}
          */
         startMutationObserver() {
-            let pendingAnimationFrame = 0;
-
             const observer = new MutationObserver(() => {
-                if (pendingAnimationFrame) {
-                    return;
-                }
-
-                pendingAnimationFrame = requestAnimationFrame(() => {
-                    pendingAnimationFrame = 0;
-                    this.scanner.findBlocks();
-                    this.applyCollapsedBlocks();
-
-                    if (this.panelElement) {
-                        const statusElement = this.panelElement.querySelector(".mrbr-cvm-status"),
-                            blockCount = this.scanner.findBlocks().length;
-
-                        if (statusElement) {
-                            statusElement.textContent = `${blockCount} blocks detected`;
-                        }
-                    }
-                });
+                this.scheduleMutationRefresh();
             });
 
             observer.observe(document.body, {
@@ -437,11 +443,13 @@
          * @returns {void}
          */
         highlightPendingBookmark(block) {
-            document
-                .querySelectorAll(".mrbr-cvm-pending-bookmark")
-                .forEach(element => element.classList.remove("mrbr-cvm-pending-bookmark"));
+            this.scheduleDomUpdate(() => {
+                document
+                    .querySelectorAll(".mrbr-cvm-pending-bookmark")
+                    .forEach(element => element.classList.remove("mrbr-cvm-pending-bookmark"));
 
-            block.classList.add("mrbr-cvm-pending-bookmark");
+                block.classList.add("mrbr-cvm-pending-bookmark");
+            });
         }
 
 
@@ -462,7 +470,10 @@
             }
 
             this.pendingCollapseBlock = block;
-            block.classList.add("mrbr-cvm-collapse-target");
+
+            this.scheduleDomUpdate(() => {
+                block.classList.add("mrbr-cvm-collapse-target");
+            });
         }
 
         /**
@@ -471,9 +482,11 @@
          * @returns {void}
          */
         clearCollapseTargetHighlight() {
-            document
-                .querySelectorAll(".mrbr-cvm-collapse-target")
-                .forEach(element => element.classList.remove("mrbr-cvm-collapse-target"));
+            this.scheduleDomUpdate(() => {
+                document
+                    .querySelectorAll(".mrbr-cvm-collapse-target")
+                    .forEach(element => element.classList.remove("mrbr-cvm-collapse-target"));
+            });
 
             this.pendingCollapseBlock = null;
         }
@@ -523,27 +536,30 @@
                     collapsedUtc: new Date().toISOString()
                 });
             }
-
             this.clearCollapseTargetHighlight();
 
             await this.saveState();
-            this.applyCollapsedBlocks();
-            this.render();
-            this.clearCollapseTargetHighlight();
+
+            this.scheduleDomUpdate(() => {
+                this.applyCollapsedBlocks();
+                this.render();
+            });
         }
         /**
          * Applies collapsed state to all matching blocks.
          *
+         * @param {HTMLElement[]=} blocks
          * @returns {void}
          */
-        applyCollapsedBlocks() {
-            this.scanner.findBlocks();
+        applyCollapsedBlocks(blocks) {
+            const currentBlocks = blocks || this.scanner.findBlocks();
+
             this.removeOrphanedCollapsePlaceholders();
 
             for (const collapsedBlock of this.state.collapsedBlocks) {
                 const block = this.scanner.findBlockForBookmark(collapsedBlock);
 
-                if (!block) {
+                if (!block || !currentBlocks.includes(block)) {
                     continue;
                 }
 
@@ -559,17 +575,19 @@
          * @returns {void}
          */
         collapseBlockElement(block, collapsedBlock) {
-            const existingPlaceholder = this.findCollapsePlaceholder(collapsedBlock);
+            this.scheduleDomUpdate(() => {
+                const existingPlaceholder = this.findCollapsePlaceholder(collapsedBlock);
 
-            block.classList.add("mrbr-cvm-collapsed-block");
+                block.classList.add("mrbr-cvm-collapsed-block");
 
-            if (existingPlaceholder) {
-                return;
-            }
+                if (existingPlaceholder) {
+                    return;
+                }
 
-            const placeholderElement = this.createCollapsePlaceholder(collapsedBlock);
+                const placeholderElement = this.createCollapsePlaceholder(collapsedBlock);
 
-            block.insertAdjacentElement("beforebegin", placeholderElement);
+                block.insertAdjacentElement("beforebegin", placeholderElement);
+            });
         }
 
         /**
@@ -627,21 +645,24 @@
             const block = this.scanner.findBlockForBookmark(collapsedBlock),
                 placeholder = this.findCollapsePlaceholder(collapsedBlock);
 
-            if (block) {
-                block.classList.remove("mrbr-cvm-collapsed-block");
-                this.flashBlock(block);
-            }
-
-            if (placeholder) {
-                placeholder.remove();
-            }
-
             this.state.collapsedBlocks = this.state.collapsedBlocks.filter(item => {
                 return item.blockKey !== collapsedBlock.blockKey;
             });
 
             await this.saveState();
-            this.render();
+
+            this.scheduleDomUpdate(() => {
+                if (block) {
+                    block.classList.remove("mrbr-cvm-collapsed-block");
+                    this.flashBlock(block);
+                }
+
+                if (placeholder) {
+                    placeholder.remove();
+                }
+
+                this.render();
+            });
         }
 
         /**
@@ -650,18 +671,21 @@
          * @returns {Promise<void>}
          */
         async restoreAllBlocks() {
-            document
-                .querySelectorAll(".mrbr-cvm-collapsed-block")
-                .forEach(element => element.classList.remove("mrbr-cvm-collapsed-block"));
-
-            document
-                .querySelectorAll(".mrbr-cvm-collapsed-placeholder")
-                .forEach(element => element.remove());
-
             this.state.collapsedBlocks = [];
 
             await this.saveState();
-            this.render();
+
+            this.scheduleDomUpdate(() => {
+                document
+                    .querySelectorAll(".mrbr-cvm-collapsed-block")
+                    .forEach(element => element.classList.remove("mrbr-cvm-collapsed-block"));
+
+                document
+                    .querySelectorAll(".mrbr-cvm-collapsed-placeholder")
+                    .forEach(element => element.remove());
+
+                this.render();
+            });
         }
 
         /**
@@ -682,7 +706,73 @@
                     }
                 });
         }
+        /**
+         * Schedules DOM work for the next animation frame.
+         *
+         * This keeps DOM writes grouped together and avoids doing visual updates
+         * directly inside event handlers or MutationObserver callbacks.
+         *
+         * @param {() => void} callback
+         * @returns {void}
+         */
+        scheduleDomUpdate(callback) {
+            this.pendingDomUpdateCallbacks.push(callback);
 
+            if (this.domUpdateAnimationFrameId) {
+                return;
+            }
+
+            this.domUpdateAnimationFrameId = window.requestAnimationFrame(() => {
+                const callbacks = this.pendingDomUpdateCallbacks.splice(0);
+
+                this.domUpdateAnimationFrameId = 0;
+
+                for (const pendingCallback of callbacks) {
+                    try {
+                        pendingCallback();
+                    } catch (error) {
+                        console.error("ChatGPT View Manager DOM update failed.", error);
+                    }
+                }
+            });
+        }
+
+        /**
+         * Schedules a debounced refresh after ChatGPT mutates the DOM.
+         *
+         * @returns {void}
+         */
+        scheduleMutationRefresh() {
+            window.clearTimeout(this.mutationRefreshTimeoutId);
+
+            this.mutationRefreshTimeoutId = window.setTimeout(() => {
+                this.mutationRefreshTimeoutId = 0;
+
+                this.scheduleDomUpdate(() => {
+                    const blocks = this.scanner.findBlocks();
+
+                    this.applyCollapsedBlocks(blocks);
+                    this.updateBlockCountStatus(blocks.length);
+                });
+            }, 150);
+        }
+        /**
+         * Updates the detected block count in the panel.
+         *
+         * @param {number} blockCount
+         * @returns {void}
+         */
+        updateBlockCountStatus(blockCount) {
+            if (!this.panelElement) {
+                return;
+            }
+
+            const statusElement = this.panelElement.querySelector(".mrbr-cvm-status");
+
+            if (statusElement) {
+                statusElement.textContent = `${blockCount} blocks detected`;
+            }
+        }
         /**
         * Shows a non-blocking text input dialog.
         *
