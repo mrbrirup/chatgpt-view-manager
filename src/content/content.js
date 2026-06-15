@@ -1,7 +1,30 @@
 (() => {
     "use strict";
 
-    const ConversationScanner = window.MrbrCvm.ConversationScanner;
+    /**
+    * @typedef {new () => ConversationScanner} ConversationScannerConstructor
+    */
+
+    /**
+     * Gets the ConversationScanner constructor loaded by conversationScanner.js.
+     *
+     * @returns {ConversationScannerConstructor}
+     */
+    const getConversationScannerConstructor = () => {
+        const conversationScanner = window.MrbrCvm?.ConversationScanner;
+
+        if (!conversationScanner) {
+            throw new Error("ChatGPT View Manager failed to load ConversationScanner.");
+        }
+
+        return conversationScanner;
+    };
+
+    const ConversationScanner = getConversationScannerConstructor();
+
+    if (!ConversationScanner) {
+        throw new Error("ChatGPT View Manager failed to load ConversationScanner.");
+    }
 
     const MrbrChatGptViewManager = class {
         static PANEL_ID = "mrbr-cvm-panel";
@@ -354,7 +377,7 @@
             this.panelElement = document.createElement("div");
             this.panelElement.id = MrbrChatGptViewManager.PANEL_ID;
             this.panelElement.className = "mrbr-cvm-panel";
-            this.panelElement.__mrbrConversationKey = this.conversationKey;
+            this.panelElement.dataset.mrbrConversationKey = this.conversationKey;
             /**
              * Get conversation key in Chrome console for the current panel with:
              * document.querySelector("#mrbr-cvm-panel")?.__mrbrConversationKey
@@ -634,23 +657,39 @@
                     }
                 }),
                 this.createIconButton({
-                    iconName: "collapse",
-                    title: "Collapse highlighted block",
-                    onMouseEnter: () => {
-                        this.highlightCollapseTarget();
-                    },
-                    onMouseLeave: () => {
-                        this.clearCollapseTargetHighlight();
-                    },
+                    iconName: "rescan",
+                    title: "Rescan conversation blocks",
                     onClick: () => {
-                        this.collapseHighlightedBlock();
+                        this.scheduleDomUpdate(() => {
+                            const rescannedBlocks = this.scanner.findBlocks();
+
+                            this.applyCollapsedBlocks(rescannedBlocks);
+                            this.updateBlockCountStatus(rescannedBlocks.length);
+                        });
                     }
                 }),
                 this.createIconButton({
-                    iconName: "restore",
-                    title: "Restore all collapsed blocks",
+                    iconName: "exportState",
+                    title: "Export View Manager data",
                     onClick: () => {
-                        this.restoreAllBlocks();
+                        this.exportState();
+                    }
+                }),
+                this.createIconButton({
+                    iconName: "importState",
+                    title: "Import View Manager data",
+                    onClick: () => {
+                        this.importState();
+                    }
+                }),
+                this.createIconButton({
+                    iconName: "top",
+                    title: "Scroll to top",
+                    onClick: () => {
+                        window.scrollTo({
+                            top: 0,
+                            behavior: "smooth"
+                        });
                     }
                 }),
                 this.createIconButton({
@@ -686,6 +725,198 @@
             toolbarElement.append(actionGroupElement, themeGroupElement);
 
             return toolbarElement;
+        }
+        /**
+         * Exports the full View Manager state as a JSON file.
+         *
+         * @returns {Promise<void>}
+         */
+        async exportState() {
+            await this.saveState();
+
+            const exportData = {
+                exportedBy: "ChatGPT View Manager",
+                exportedUtc: new Date().toISOString(),
+                storageKey: MrbrChatGptViewManager.STORAGE_KEY,
+                activeConversationKey: this.conversationKey,
+                data: this.storageRoot
+            },
+                json = JSON.stringify(exportData, null, 4),
+                blob = new Blob([json], {
+                    type: "application/json"
+                }),
+                objectUrl = URL.createObjectURL(blob),
+                anchorElement = document.createElement("a");
+
+            anchorElement.href = objectUrl;
+            anchorElement.download = this.createExportFileName();
+
+            this.scheduleDomUpdate(() => {
+                document.documentElement.append(anchorElement);
+                anchorElement.click();
+                anchorElement.remove();
+
+                window.setTimeout(() => {
+                    URL.revokeObjectURL(objectUrl);
+                }, 1000);
+            });
+        }
+        /**
+         * Checks whether a value looks like a version 2 storage root.
+         *
+         * @param {any} value
+         * @returns {boolean}
+         */
+        isValidStorageRoot(value) {
+            return value
+                && typeof value === "object"
+                && value.version === 2
+                && value.globalUi
+                && typeof value.globalUi === "object"
+                && value.conversations
+                && typeof value.conversations === "object";
+        }
+        /**
+         * Imports View Manager state from a JSON file.
+         *
+         * @returns {Promise<void>}
+         */
+        async importState() {
+            const jsonText = await this.readImportFileText();
+
+            if (!jsonText) {
+                return;
+            }
+
+            let parsed;
+
+            try {
+                parsed = JSON.parse(jsonText);
+            } catch (error) {
+                alert("Import failed. The selected file is not valid JSON.");
+                console.error("View Manager import JSON parse failed.", error);
+                return;
+            }
+
+            const importedRoot = parsed?.data || parsed;
+
+            if (!this.isValidStorageRoot(importedRoot)) {
+                alert("Import failed. The selected file does not contain valid View Manager data.");
+                return;
+            }
+
+            const shouldImport = confirm(
+                "Import View Manager data?\n\n" +
+                "This will replace your current View Manager bookmarks, collapsed blocks, and UI settings."
+            );
+
+            if (!shouldImport) {
+                return;
+            }
+
+            this.storageRoot = this.normalizeStorageRoot(importedRoot);
+
+            await chrome.storage.local.set({
+                [MrbrChatGptViewManager.STORAGE_KEY]: this.storageRoot
+            });
+
+            await this.loadState();
+
+            this.scheduleDomUpdate(() => {
+                this.applyThemeClass();
+                this.scanner.findBlocks();
+                this.render();
+            });
+
+            alert("View Manager data imported successfully.");
+        }
+        /**
+         * Normalises an imported storage root.
+         *
+         * @param {any} importedRoot
+         * @returns {{
+         *     version: number,
+         *     globalUi: {
+         *         theme: "auto" | "dark" | "light",
+         *         isPanelCollapsed: boolean
+         *     },
+         *     conversations: Record<string, {
+         *         bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }>,
+         *         collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
+         *     }>
+         * }}
+         */
+        normalizeStorageRoot(importedRoot) {
+            /**
+             * @type {Record<string, {
+             *     bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }>,
+             *     collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
+             * }>}
+             */
+            const conversations = {};
+
+            for (const [conversationKey, conversationState] of Object.entries(importedRoot.conversations || {})) {
+                conversations[conversationKey] = this.normalizeConversationState(conversationState);
+            }
+
+            return {
+                version: 2,
+                globalUi: this.normalizeUiState(importedRoot.globalUi),
+                conversations
+            };
+        }
+        /**
+        * Prompts the user to choose a JSON file and returns its text.
+        *
+        * @returns {Promise<string | null>}
+        */
+        readImportFileText() {
+            return new Promise(resolve => {
+                const inputElement = document.createElement("input");
+
+                inputElement.type = "file";
+                inputElement.accept = "application/json,.json";
+
+                inputElement.addEventListener("change", async () => {
+                    const file = inputElement.files?.[0];
+
+                    inputElement.remove();
+
+                    if (!file) {
+                        resolve(null);
+                        return;
+                    }
+
+                    try {
+                        resolve(await file.text());
+                    } catch (error) {
+                        console.error("Failed to read import file.", error);
+                        resolve(null);
+                    }
+                });
+
+                inputElement.addEventListener("cancel", () => {
+                    inputElement.remove();
+                    resolve(null);
+                });
+
+                this.scheduleDomUpdate(() => {
+                    document.documentElement.append(inputElement);
+                    inputElement.click();
+                });
+            });
+        }
+        /**
+        * Creates a safe timestamped export filename.
+        *
+        * @returns {string}
+        */
+        createExportFileName() {
+            const timestamp = new Date()
+                .toISOString()
+                .replace(/[:.]/g, "-");
+
+            return `chatgpt-view-manager-${timestamp}.json`;
         }
         /**
          * Creates one compact theme toggle icon button.
@@ -1370,7 +1601,7 @@
         /**
  * Gets the SVG path data for an icon.
  *
- * @param {"bookmark" | "collapse" | "restore" | "rescan" | "top" | "go" | "delete" | "expandPanel" | "collapsePanel"| "lightTheme" | "darkTheme" | "autoTheme"} iconName
+ * @param {"bookmark" | "collapse" | "restore" | "rescan" | "top" | "go" | "delete" | "expandPanel" | "collapsePanel"| "lightTheme" | "darkTheme" | "autoTheme" | "exportState" | "importState"} iconName
  * @returns {string}
  */
         getIconPath(iconName) {
@@ -1401,6 +1632,11 @@
 
                 case "autoTheme":
                     return "M12 3a9 9 0 1 0 0 18V3zm0 2v14a7 7 0 0 1 0-14z";
+                case "exportState":
+                    return "M12 3l5 5h-3v6h-4V8H7l5-5zm-7 13h2v3h10v-3h2v5H5v-5z";
+
+                case "importState":
+                    return "M10 3h4v6h3l-5 5-5-5h3V3zm-5 13h2v3h10v-3h2v5H5v-5z";
                 default:
                     return "";
             }
@@ -1409,7 +1645,7 @@
         /**
          * Creates an SVG icon element.
          *
-         * @param {"bookmark" | "collapse" | "restore" | "rescan" | "top" | "go" | "delete" | "expandPanel" | "collapsePanel"| "lightTheme" | "darkTheme" | "autoTheme"} iconName
+         * @param {"bookmark" | "collapse" | "restore" | "rescan" | "top" | "go" | "delete" | "expandPanel" | "collapsePanel"| "lightTheme" | "darkTheme" | "autoTheme" | "exportState" | "importState"} iconName
          * @returns {SVGSVGElement}
          */
         createIconElement(iconName) {
@@ -1433,7 +1669,7 @@
          * Creates a compact icon button.
          *
          * @param {{
-         *     iconName: "bookmark" | "collapse" | "restore" | "rescan" | "top" | "go" | "delete" | "expandPanel" | "collapsePanel",
+         *     iconName: "bookmark" | "collapse" | "restore" | "rescan" | "top" | "go" | "delete" | "expandPanel" | "collapsePanel" | "lightTheme" | "darkTheme" | "autoTheme" | "exportState" | "importState", 
          *     title: string,
          *     onClick: (event: MouseEvent) => void,
          *     onMouseEnter?: (event: MouseEvent) => void,
