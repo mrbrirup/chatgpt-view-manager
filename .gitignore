@@ -1,0 +1,12 @@
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+
+.DS_Store
+Thumbs.db
+
+node_modules/
+dist/
+build/
+
+*.log
