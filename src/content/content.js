@@ -18,7 +18,7 @@
         scanner = new ConversationScanner();
 
         /**
-         * @type {{ bookmarks: Array<{ id: string, title: string, blockKey: string, createdUtc: string }> }}
+         * @type {{ bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }> }}
          */
         state = {
             bookmarks: []
@@ -164,7 +164,7 @@
             titleElement.textContent = bookmark.title;
 
             blockKeyElement.className = "mrbr-cvm-bookmark-key";
-            blockKeyElement.textContent = bookmark.blockKey;
+            blockKeyElement.textContent = bookmark.blockKey || `${bookmark.role || "unknown"}-${bookmark.blockIndex || "?"}`;
 
             buttonRowElement.className = "mrbr-cvm-actions";
 
@@ -189,10 +189,10 @@
         }
 
         /**
-         * Adds a bookmark for the currently visible conversation block.
-         *
-         * @returns {Promise<void>}
-         */
+        * Adds a bookmark for the currently visible conversation block.
+        *
+        * @returns {Promise<void>}
+        */
         async addBookmarkForVisibleBlock() {
             const block = this.findBestVisibleBlock();
 
@@ -201,20 +201,32 @@
                 return;
             }
 
-            const blockKey = block.getAttribute(ConversationScanner.BLOCK_KEY_ATTRIBUTE),
-                defaultTitle = this.scanner.getBlockTitle(block),
-                title = prompt("Bookmark title", defaultTitle);
+            this.highlightPendingBookmark(block);
 
-            if (!title || !blockKey) {
+            const identity = this.scanner.getBlockIdentity(block),
+                defaultTitle = this.scanner.getBlockTitle(block),
+                title = await this.showTextInputDialog({
+                    title: "Add bookmark",
+                    label: "Bookmark title",
+                    value: defaultTitle
+                });
+
+            if (!title || !identity.blockKey) {
+                block.classList.remove("mrbr-cvm-pending-bookmark");
                 return;
             }
 
             this.state.bookmarks.push({
                 id: crypto.randomUUID(),
                 title,
-                blockKey,
+                blockKey: identity.blockKey,
+                blockIndex: identity.blockIndex,
+                role: identity.role,
+                contentHash: identity.contentHash,
                 createdUtc: new Date().toISOString()
             });
+
+            block.classList.remove("mrbr-cvm-pending-bookmark");
 
             await this.saveState();
             this.render();
@@ -223,16 +235,16 @@
         /**
          * Scrolls to a bookmark's block.
          *
-         * @param {{ id: string, title: string, blockKey: string, createdUtc: string }} bookmark
+         * @param {{ id: string, title: string, blockKey?: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }} bookmark
          * @returns {void}
          */
         goToBookmark(bookmark) {
             this.scanner.findBlocks();
 
-            const block = this.scanner.findBlockByKey(bookmark.blockKey);
+            const block = this.scanner.findBlockForBookmark(bookmark);
 
             if (!block) {
-                alert(`Could not find ${bookmark.blockKey}. Try rescanning after the page has fully loaded.`);
+                alert(`Could not find bookmark "${bookmark.title}". Try rescanning after the page has fully loaded.`);
                 return;
             }
 
@@ -322,7 +334,134 @@
                 subtree: true
             });
         }
+        /**
+         * Highlights the block that is about to be bookmarked.
+         *
+         * @param {HTMLElement} block
+         * @returns {void}
+         */
+        highlightPendingBookmark(block) {
+            document
+                .querySelectorAll(".mrbr-cvm-pending-bookmark")
+                .forEach(element => element.classList.remove("mrbr-cvm-pending-bookmark"));
+
+            block.classList.add("mrbr-cvm-pending-bookmark");
+        }
+        /**
+ * Shows a non-blocking text input dialog.
+ *
+ * @param {{ title: string, label: string, value: string }} options
+ * @returns {Promise<string | null>}
+ */
+        showTextInputDialog(options) {
+            return new Promise(resolve => {
+                const backdropElement = document.createElement("div"),
+                    dialogElement = document.createElement("div"),
+                    titleElement = document.createElement("h2"),
+                    labelElement = document.createElement("label"),
+                    inputElement = document.createElement("input"),
+                    actionsElement = document.createElement("div"),
+                    cancelButton = document.createElement("button"),
+                    saveButton = document.createElement("button"),
+                    dialogId = `mrbr-cvm-dialog-${crypto.randomUUID()}`,
+                    inputId = `${dialogId}-input`;
+
+                let isResolved = false;
+
+                /**
+                 * Closes the dialog and resolves once.
+                 *
+                 * @param {string | null} value
+                 * @returns {void}
+                 */
+                const closeDialog = value => {
+                    if (isResolved) {
+                        return;
+                    }
+
+                    isResolved = true;
+                    document.removeEventListener("keydown", handleDocumentKeyDown, true);
+                    backdropElement.remove();
+                    resolve(value);
+                };
+
+                /**
+                 * Handles document-level keyboard shortcuts.
+                 *
+                 * @param {KeyboardEvent} event
+                 * @returns {void}
+                 */
+                const handleDocumentKeyDown = event => {
+                    if (event.key === "Escape") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        closeDialog(null);
+                    }
+                };
+
+                backdropElement.className = "mrbr-cvm-dialog-backdrop";
+
+                dialogElement.className = "mrbr-cvm-dialog";
+                dialogElement.setAttribute("role", "dialog");
+                dialogElement.setAttribute("aria-modal", "true");
+                dialogElement.setAttribute("aria-labelledby", dialogId);
+
+                titleElement.id = dialogId;
+                titleElement.className = "mrbr-cvm-dialog-title";
+                titleElement.textContent = options.title;
+
+                labelElement.className = "mrbr-cvm-dialog-label";
+                labelElement.htmlFor = inputId;
+                labelElement.textContent = options.label;
+
+                inputElement.id = inputId;
+                inputElement.className = "mrbr-cvm-dialog-input";
+                inputElement.type = "text";
+                inputElement.value = options.value;
+                inputElement.select();
+
+                inputElement.addEventListener("keydown", event => {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        closeDialog(inputElement.value.trim());
+                    }
+                });
+
+                actionsElement.className = "mrbr-cvm-dialog-actions";
+
+                cancelButton.type = "button";
+                cancelButton.textContent = "Cancel";
+                cancelButton.addEventListener("click", () => {
+                    closeDialog(null);
+                });
+
+                saveButton.type = "button";
+                saveButton.textContent = "Save bookmark";
+                saveButton.addEventListener("click", () => {
+                    closeDialog(inputElement.value.trim());
+                });
+
+                backdropElement.addEventListener("click", event => {
+                    if (event.target === backdropElement) {
+                        closeDialog(null);
+                    }
+                });
+
+                document.addEventListener("keydown", handleDocumentKeyDown, true);
+
+                actionsElement.append(cancelButton, saveButton);
+                dialogElement.append(titleElement, labelElement, inputElement, actionsElement);
+                backdropElement.append(dialogElement);
+                document.documentElement.append(backdropElement);
+
+                window.requestAnimationFrame(() => {
+                    inputElement.focus();
+                    inputElement.select();
+                });
+            });
+        }
     };
+
 
     const manager = new MrbrChatGptViewManager();
 

@@ -9,7 +9,10 @@
     --mrbr-cvm-bookmark-background: #1f1f1f;
     --mrbr-cvm-bookmark-border: #555;
 }
-
+:root {
+    --mrbr-cvm-pending-bookmark-outline: #ff3333;
+    --mrbr-cvm-pending-bookmark-shadow: rgba(255, 51, 51, 0.25);
+}
 .mrbr-cvm-panel {
     position: fixed;
     top: 80px;
@@ -98,4 +101,85 @@
     outline: 3px solid #fff !important;
     outline-offset: 4px !important;
     transition: outline-color 1.2s ease;
+}
+.mrbr-cvm-bookmark-key {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mrbr-cvm-pending-bookmark {
+    outline: 3px dashed var(--mrbr-cvm-pending-bookmark-outline) !important;
+    outline-offset: 6px !important;
+    box-shadow: 0 0 0 6px var(--mrbr-cvm-pending-bookmark-shadow) !important;
+}
+.mrbr-cvm-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--mrbr-cvm-panel-z-index) - 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.mrbr-cvm-dialog {
+    width: min(520px, calc(100vw - 40px));
+    box-sizing: border-box;
+    padding: 16px;
+    border: 1px solid var(--mrbr-cvm-panel-border);
+    border-radius: 8px;
+    background: var(--mrbr-cvm-panel-background);
+    color: var(--mrbr-cvm-panel-foreground);
+    font-family: Arial, sans-serif;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+
+.mrbr-cvm-dialog-title {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.mrbr-cvm-dialog-label {
+    display: block;
+    margin-bottom: 6px;
+    color: #ddd;
+    font-size: 13px;
+}
+
+.mrbr-cvm-dialog-input {
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--mrbr-cvm-panel-border);
+    border-radius: 5px;
+    background: #050505;
+    color: #fff;
+    font-size: 13px;
+}
+
+.mrbr-cvm-dialog-input:focus {
+    outline: 2px solid #888;
+    outline-offset: 2px;
+}
+
+.mrbr-cvm-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.mrbr-cvm-dialog-actions button {
+    cursor: pointer;
+    padding: 7px 10px;
+    border: 1px solid var(--mrbr-cvm-panel-border);
+    border-radius: 5px;
+    background: var(--mrbr-cvm-button-background);
+    color: var(--mrbr-cvm-panel-foreground);
+}
+
+.mrbr-cvm-dialog-actions button:hover {
+    background: var(--mrbr-cvm-button-hover-background);
 }
