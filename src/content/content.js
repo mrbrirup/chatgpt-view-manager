@@ -6,6 +6,53 @@
     */
 
     /**
+    * @typedef {{
+    *     id: string,
+    *     title: string,
+    *     blockKey: string,
+    *     blockIndex?: number,
+    *     role?: string,
+    *     contentHash?: string,
+    *     createdUtc: string
+    * }} MrbrCvmBookmark
+    */
+
+    /**
+     * @typedef {{
+     *     blockKey: string,
+     *     blockIndex?: number,
+     *     role?: string,
+     *     contentHash?: string,
+     *     title: string,
+     *     collapsedUtc: string
+     * }} MrbrCvmCollapsedBlock
+     */
+
+    /**
+     * @typedef {{
+     *     bookmarks: MrbrCvmBookmark[],
+     *     collapsedBlocks: MrbrCvmCollapsedBlock[]
+     * }} MrbrCvmConversationState
+     */
+
+    /**
+     * @typedef {{
+     *     theme: "auto" | "dark" | "light",
+     *     isPanelCollapsed: boolean
+     * }} MrbrCvmUiState
+     */
+
+    /**
+     * @typedef {{
+     *     version: number,
+     *     globalUi: MrbrCvmUiState,
+     *     conversations: Record<string, MrbrCvmConversationState>
+     * }} MrbrCvmStorageRoot
+     */
+
+
+
+    /**
      * Gets the ConversationScanner constructor loaded by conversationScanner.js.
      *
      * @returns {ConversationScannerConstructor}
@@ -713,7 +760,21 @@
                             behavior: "smooth"
                         });
                     }
-                })
+                }),
+                this.createIconButton({
+                    iconName: "exportState",
+                    title: "Export View Manager data",
+                    onClick: () => {
+                        this.exportState();
+                    }
+                }),
+                this.createIconButton({
+                    iconName: "importState",
+                    title: "Import View Manager data",
+                    onClick: () => {
+                        this.importState();
+                    }
+                }),
             );
 
             themeGroupElement.append(
@@ -726,6 +787,7 @@
 
             return toolbarElement;
         }
+
         /**
          * Exports the full View Manager state as a JSON file.
          *
@@ -776,11 +838,32 @@
                 && value.conversations
                 && typeof value.conversations === "object";
         }
+
         /**
-         * Imports View Manager state from a JSON file.
+         * Normalises an imported storage root.
          *
-         * @returns {Promise<void>}
+         * @param {any} importedRoot
+         * @returns {MrbrCvmStorageRoot}
          */
+        normalizeStorageRoot(importedRoot) {
+            /** @type {Record<string, MrbrCvmConversationState>} */
+            const conversations = {};
+
+            for (const [conversationKey, conversationState] of Object.entries(importedRoot.conversations || {})) {
+                conversations[conversationKey] = this.normalizeConversationState(conversationState);
+            }
+
+            return {
+                version: 2,
+                globalUi: this.normalizeUiState(importedRoot.globalUi),
+                conversations
+            };
+        }
+        /**
+        * Imports View Manager state from a JSON file.
+        *
+        * @returns {Promise<void>}
+        */
         async importState() {
             const jsonText = await this.readImportFileText();
 
@@ -830,46 +913,12 @@
 
             alert("View Manager data imported successfully.");
         }
+
         /**
-         * Normalises an imported storage root.
+         * Prompts the user to choose a JSON file and returns its text.
          *
-         * @param {any} importedRoot
-         * @returns {{
-         *     version: number,
-         *     globalUi: {
-         *         theme: "auto" | "dark" | "light",
-         *         isPanelCollapsed: boolean
-         *     },
-         *     conversations: Record<string, {
-         *         bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }>,
-         *         collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
-         *     }>
-         * }}
+         * @returns {Promise<string | null>}
          */
-        normalizeStorageRoot(importedRoot) {
-            /**
-             * @type {Record<string, {
-             *     bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }>,
-             *     collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
-             * }>}
-             */
-            const conversations = {};
-
-            for (const [conversationKey, conversationState] of Object.entries(importedRoot.conversations || {})) {
-                conversations[conversationKey] = this.normalizeConversationState(conversationState);
-            }
-
-            return {
-                version: 2,
-                globalUi: this.normalizeUiState(importedRoot.globalUi),
-                conversations
-            };
-        }
-        /**
-        * Prompts the user to choose a JSON file and returns its text.
-        *
-        * @returns {Promise<string | null>}
-        */
         readImportFileText() {
             return new Promise(resolve => {
                 const inputElement = document.createElement("input");
@@ -906,11 +955,12 @@
                 });
             });
         }
+
         /**
-        * Creates a safe timestamped export filename.
-        *
-        * @returns {string}
-        */
+         * Creates a safe timestamped export filename.
+         *
+         * @returns {string}
+         */
         createExportFileName() {
             const timestamp = new Date()
                 .toISOString()
