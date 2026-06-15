@@ -20,6 +20,145 @@
     --mrbr-cvm-collapse-target-shadow: rgba(255, 51, 51, 0.25);
 }
 
+:root {
+    --mrbr-cvm-panel-width: 280px;
+    --mrbr-cvm-panel-z-index: 2147483647;
+
+    --mrbr-cvm-font-family: Arial, sans-serif;
+    --mrbr-cvm-monospace-font-family: Consolas, Monaco, monospace;
+
+    --mrbr-cvm-panel-background: #111111;
+    --mrbr-cvm-panel-foreground: #ffffff;
+    --mrbr-cvm-panel-muted-foreground: #bbbbbb;
+    --mrbr-cvm-panel-border: #444444;
+    --mrbr-cvm-panel-shadow: rgba(0, 0, 0, 0.35);
+
+    --mrbr-cvm-button-background: #222222;
+    --mrbr-cvm-button-foreground: #ffffff;
+    --mrbr-cvm-button-border: #444444;
+    --mrbr-cvm-button-hover-background: #333333;
+    --mrbr-cvm-button-active-background: #3a3a3a;
+    --mrbr-cvm-button-active-border: #888888;
+
+    --mrbr-cvm-input-background: #050505;
+    --mrbr-cvm-input-foreground: #ffffff;
+    --mrbr-cvm-input-border: #555555;
+    --mrbr-cvm-input-focus-outline: #888888;
+
+    --mrbr-cvm-bookmark-background: #1f1f1f;
+    --mrbr-cvm-bookmark-border: #555555;
+    --mrbr-cvm-bookmark-key-foreground: #aaaaaa;
+
+    --mrbr-cvm-collapsed-background: #1a1a1a;
+    --mrbr-cvm-collapsed-border: #666666;
+    --mrbr-cvm-collapsed-foreground: #dddddd;
+    --mrbr-cvm-collapsed-meta-foreground: #aaaaaa;
+
+    --mrbr-cvm-dialog-backdrop-background: rgba(0, 0, 0, 0.45);
+    --mrbr-cvm-dialog-shadow: rgba(0, 0, 0, 0.45);
+
+    --mrbr-cvm-pending-bookmark-outline: #ff3333;
+    --mrbr-cvm-pending-bookmark-shadow: rgba(255, 51, 51, 0.25);
+
+    --mrbr-cvm-collapse-target-outline: #ff3333;
+    --mrbr-cvm-collapse-target-shadow: rgba(255, 51, 51, 0.25);
+
+    --mrbr-cvm-flash-outline: #ff3333;
+}
+
+:root.mrbr-cvm-theme-dark {
+    color-scheme: dark;
+}
+
+:root.mrbr-cvm-theme-light {
+    color-scheme: light;
+
+    --mrbr-cvm-panel-background: #ffffff;
+    --mrbr-cvm-panel-foreground: #111111;
+    --mrbr-cvm-panel-muted-foreground: #555555;
+    --mrbr-cvm-panel-border: #cccccc;
+    --mrbr-cvm-panel-shadow: rgba(0, 0, 0, 0.18);
+
+    --mrbr-cvm-button-background: #f5f5f5;
+    --mrbr-cvm-button-foreground: #111111;
+    --mrbr-cvm-button-border: #cccccc;
+    --mrbr-cvm-button-hover-background: #e8e8e8;
+    --mrbr-cvm-button-active-background: #dddddd;
+    --mrbr-cvm-button-active-border: #777777;
+
+    --mrbr-cvm-input-background: #ffffff;
+    --mrbr-cvm-input-foreground: #111111;
+    --mrbr-cvm-input-border: #bbbbbb;
+    --mrbr-cvm-input-focus-outline: #555555;
+
+    --mrbr-cvm-bookmark-background: #f7f7f7;
+    --mrbr-cvm-bookmark-border: #cccccc;
+    --mrbr-cvm-bookmark-key-foreground: #666666;
+
+    --mrbr-cvm-collapsed-background: #f5f5f5;
+    --mrbr-cvm-collapsed-border: #999999;
+    --mrbr-cvm-collapsed-foreground: #222222;
+    --mrbr-cvm-collapsed-meta-foreground: #666666;
+
+    --mrbr-cvm-dialog-backdrop-background: rgba(0, 0, 0, 0.28);
+    --mrbr-cvm-dialog-shadow: rgba(0, 0, 0, 0.25);
+
+    --mrbr-cvm-pending-bookmark-outline: #cc0000;
+    --mrbr-cvm-pending-bookmark-shadow: rgba(204, 0, 0, 0.20);
+
+    --mrbr-cvm-collapse-target-outline: #cc0000;
+    --mrbr-cvm-collapse-target-shadow: rgba(204, 0, 0, 0.20);
+
+    --mrbr-cvm-flash-outline: #cc0000;
+}
+
+@media (prefers-color-scheme: light) {
+    :root.mrbr-cvm-theme-auto {
+        color-scheme: light;
+
+        --mrbr-cvm-panel-background: #ffffff;
+        --mrbr-cvm-panel-foreground: #111111;
+        --mrbr-cvm-panel-muted-foreground: #555555;
+        --mrbr-cvm-panel-border: #cccccc;
+        --mrbr-cvm-panel-shadow: rgba(0, 0, 0, 0.18);
+
+        --mrbr-cvm-button-background: #f5f5f5;
+        --mrbr-cvm-button-foreground: #111111;
+        --mrbr-cvm-button-border: #cccccc;
+        --mrbr-cvm-button-hover-background: #e8e8e8;
+        --mrbr-cvm-button-active-background: #dddddd;
+        --mrbr-cvm-button-active-border: #777777;
+
+        --mrbr-cvm-input-background: #ffffff;
+        --mrbr-cvm-input-foreground: #111111;
+        --mrbr-cvm-input-border: #bbbbbb;
+        --mrbr-cvm-input-focus-outline: #555555;
+
+        --mrbr-cvm-bookmark-background: #f7f7f7;
+        --mrbr-cvm-bookmark-border: #cccccc;
+        --mrbr-cvm-bookmark-key-foreground: #666666;
+
+        --mrbr-cvm-collapsed-background: #f5f5f5;
+        --mrbr-cvm-collapsed-border: #999999;
+        --mrbr-cvm-collapsed-foreground: #222222;
+        --mrbr-cvm-collapsed-meta-foreground: #666666;
+
+        --mrbr-cvm-dialog-backdrop-background: rgba(0, 0, 0, 0.28);
+        --mrbr-cvm-dialog-shadow: rgba(0, 0, 0, 0.25);
+
+        --mrbr-cvm-pending-bookmark-outline: #cc0000;
+        --mrbr-cvm-pending-bookmark-shadow: rgba(204, 0, 0, 0.20);
+
+        --mrbr-cvm-collapse-target-outline: #cc0000;
+        --mrbr-cvm-collapse-target-shadow: rgba(204, 0, 0, 0.20);
+
+        --mrbr-cvm-flash-outline: #cc0000;
+    }
+}
+
+
+
+
 .mrbr-cvm-collapse-target {
     outline: 3px dashed var(--mrbr-cvm-collapse-target-outline) !important;
     outline-offset: 6px !important;
@@ -248,4 +387,139 @@
 
 .mrbr-cvm-collapsed-placeholder button:hover {
     background: var(--mrbr-cvm-button-hover-background);
+}
+
+.mrbr-cvm-panel {
+    background: var(--mrbr-cvm-panel-background);
+    color: var(--mrbr-cvm-panel-foreground);
+    border-color: var(--mrbr-cvm-panel-border);
+    font-family: var(--mrbr-cvm-font-family);
+    box-shadow: 0 8px 24px var(--mrbr-cvm-panel-shadow);
+}
+
+.mrbr-cvm-panel button {
+    border-color: var(--mrbr-cvm-button-border);
+    background: var(--mrbr-cvm-button-background);
+    color: var(--mrbr-cvm-button-foreground);
+}
+
+.mrbr-cvm-panel button:hover {
+    background: var(--mrbr-cvm-button-hover-background);
+}
+
+.mrbr-cvm-status {
+    color: var(--mrbr-cvm-panel-muted-foreground);
+}
+
+.mrbr-cvm-bookmark {
+    background: var(--mrbr-cvm-bookmark-background);
+    border-color: var(--mrbr-cvm-bookmark-border);
+}
+
+.mrbr-cvm-bookmark-key {
+    color: var(--mrbr-cvm-bookmark-key-foreground);
+    font-family: var(--mrbr-cvm-monospace-font-family);
+}
+
+.mrbr-cvm-theme-control {
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--mrbr-cvm-panel-border);
+}
+
+.mrbr-cvm-theme-label {
+    margin-bottom: 6px;
+    color: var(--mrbr-cvm-panel-muted-foreground);
+    font-size: 12px;
+}
+
+.mrbr-cvm-theme-buttons {
+    display: flex;
+    gap: 6px;
+}
+
+.mrbr-cvm-theme-button {
+    flex: 1;
+}
+
+.mrbr-cvm-theme-button-active {
+    background: var(--mrbr-cvm-button-active-background) !important;
+    border-color: var(--mrbr-cvm-button-active-border) !important;
+    font-weight: 600;
+}
+
+.mrbr-cvm-dialog-backdrop {
+    background: var(--mrbr-cvm-dialog-backdrop-background);
+}
+
+.mrbr-cvm-dialog {
+    background: var(--mrbr-cvm-panel-background);
+    color: var(--mrbr-cvm-panel-foreground);
+    border-color: var(--mrbr-cvm-panel-border);
+    font-family: var(--mrbr-cvm-font-family);
+    box-shadow: 0 12px 36px var(--mrbr-cvm-dialog-shadow);
+}
+
+.mrbr-cvm-dialog-label {
+    color: var(--mrbr-cvm-panel-muted-foreground);
+}
+
+.mrbr-cvm-dialog-input {
+    background: var(--mrbr-cvm-input-background);
+    color: var(--mrbr-cvm-input-foreground);
+    border-color: var(--mrbr-cvm-input-border);
+}
+
+.mrbr-cvm-dialog-input:focus {
+    outline-color: var(--mrbr-cvm-input-focus-outline);
+}
+
+.mrbr-cvm-dialog-actions button {
+    border-color: var(--mrbr-cvm-button-border);
+    background: var(--mrbr-cvm-button-background);
+    color: var(--mrbr-cvm-button-foreground);
+}
+
+.mrbr-cvm-dialog-actions button:hover {
+    background: var(--mrbr-cvm-button-hover-background);
+}
+
+.mrbr-cvm-collapsed-placeholder {
+    background: var(--mrbr-cvm-collapsed-background);
+    color: var(--mrbr-cvm-collapsed-foreground);
+    border-color: var(--mrbr-cvm-collapsed-border);
+    font-family: var(--mrbr-cvm-font-family);
+}
+
+.mrbr-cvm-collapsed-meta {
+    color: var(--mrbr-cvm-collapsed-meta-foreground);
+    font-family: var(--mrbr-cvm-monospace-font-family);
+}
+
+.mrbr-cvm-collapsed-placeholder button {
+    border-color: var(--mrbr-cvm-button-border);
+    background: var(--mrbr-cvm-button-background);
+    color: var(--mrbr-cvm-button-foreground);
+}
+
+.mrbr-cvm-collapsed-placeholder button:hover {
+    background: var(--mrbr-cvm-button-hover-background);
+}
+
+.mrbr-cvm-pending-bookmark {
+    outline: 3px dashed var(--mrbr-cvm-pending-bookmark-outline) !important;
+    outline-offset: 6px !important;
+    box-shadow: 0 0 0 6px var(--mrbr-cvm-pending-bookmark-shadow) !important;
+}
+
+.mrbr-cvm-collapse-target {
+    outline: 3px dashed var(--mrbr-cvm-collapse-target-outline) !important;
+    outline-offset: 6px !important;
+    box-shadow: 0 0 0 6px var(--mrbr-cvm-collapse-target-shadow) !important;
+}
+
+.mrbr-cvm-flash {
+    outline: 3px solid var(--mrbr-cvm-flash-outline) !important;
+    outline-offset: 4px !important;
+    transition: outline-color 1.2s ease;
 }

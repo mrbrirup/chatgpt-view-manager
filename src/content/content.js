@@ -20,12 +20,18 @@
         /**
          * @type {{
          *     bookmarks: Array<{ id: string, title: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }>,
-         *     collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
+         *     collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>,
+         *     ui: {
+         *         theme: "auto" | "dark" | "light"
+         *     }
          * }}
          */
         state = {
             bookmarks: [],
-            collapsedBlocks: []
+            collapsedBlocks: [],
+            ui: {
+                theme: "auto"
+            }
         };
 
         /**
@@ -49,6 +55,7 @@
         pendingDomUpdateCallbacks = [];
 
 
+
         /**
          * Starts the extension content script.
          *
@@ -58,13 +65,13 @@
             await this.loadState();
 
             this.scheduleDomUpdate(() => {
+                this.applyThemeClass();
                 this.scanner.findBlocks();
                 this.createPanel();
                 this.render();
                 this.startMutationObserver();
             });
         }
-
         /**
          * Loads persisted state from chrome.storage.local.
          *
@@ -81,11 +88,93 @@
                         : [],
                     collapsedBlocks: Array.isArray(savedState.collapsedBlocks)
                         ? savedState.collapsedBlocks
-                        : []
+                        : [],
+                    ui: {
+                        theme: savedState.ui?.theme === "dark" || savedState.ui?.theme === "light"
+                            ? savedState.ui.theme
+                            : "auto"
+                    }
                 };
             }
         }
+        /**
+         * Applies the selected theme class to the document root.
+         *
+         * @returns {void}
+         */
+        applyThemeClass() {
+            const rootElement = document.documentElement;
 
+            rootElement.classList.remove(
+                "mrbr-cvm-theme-auto",
+                "mrbr-cvm-theme-dark",
+                "mrbr-cvm-theme-light"
+            );
+
+            rootElement.classList.add(`mrbr-cvm-theme-${this.state.ui.theme}`);
+        }
+
+        /**
+         * Sets and persists the selected UI theme.
+         *
+         * @param {"auto" | "dark" | "light"} theme
+         * @returns {Promise<void>}
+         */
+        async setTheme(theme) {
+            this.state.ui.theme = theme;
+
+            await this.saveState();
+
+            this.scheduleDomUpdate(() => {
+                this.applyThemeClass();
+                this.render();
+            });
+        }
+
+        /**
+         * Gets display text for a theme option.
+         *
+         * @param {"auto" | "dark" | "light"} theme
+         * @returns {string}
+         */
+        getThemeLabel(theme) {
+            switch (theme) {
+                case "dark":
+                    return "Dark";
+                case "light":
+                    return "Light";
+                case "auto":
+                default:
+                    return "Auto";
+            }
+        }
+
+        /**
+         * Creates one theme selection button.
+         *
+         * @param {"auto" | "dark" | "light"} theme
+         * @returns {HTMLButtonElement}
+         */
+        createThemeButton(theme) {
+            const button = document.createElement("button");
+
+            button.type = "button";
+            button.textContent = this.getThemeLabel(theme);
+            button.className = "mrbr-cvm-theme-button";
+
+            if (this.state.ui.theme === theme) {
+                button.classList.add("mrbr-cvm-theme-button-active");
+                button.setAttribute("aria-pressed", "true");
+            } else {
+                button.setAttribute("aria-pressed", "false");
+            }
+
+            button.addEventListener("click", () => {
+                this.setTheme(theme);
+            });
+
+            return button;
+        }
         /**
          * Saves current state to chrome.storage.local.
          *
@@ -171,6 +260,9 @@
 
                 const titleElement = document.createElement("h2"),
                     statusElement = document.createElement("div"),
+                    themeElement = document.createElement("div"),
+                    themeLabelElement = document.createElement("div"),
+                    themeButtonsElement = document.createElement("div"),
                     actionsElement = document.createElement("div"),
                     addBookmarkButton = document.createElement("button"),
                     collapseVisibleButton = document.createElement("button"),
@@ -184,6 +276,21 @@
 
                 statusElement.className = "mrbr-cvm-status";
                 statusElement.textContent = `${blocks.length} blocks detected`;
+
+                themeElement.className = "mrbr-cvm-theme-control";
+
+                themeLabelElement.className = "mrbr-cvm-theme-label";
+                themeLabelElement.textContent = "Theme";
+
+                themeButtonsElement.className = "mrbr-cvm-theme-buttons";
+                themeButtonsElement.append(
+                    this.createThemeButton("auto"),
+                    this.createThemeButton("dark"),
+                    this.createThemeButton("light")
+                );
+
+                themeElement.append(themeLabelElement, themeButtonsElement);
+
 
                 actionsElement.className = "mrbr-cvm-actions";
 
@@ -228,7 +335,7 @@
                 }
 
                 actionsElement.append(addBookmarkButton, collapseVisibleButton, restoreAllButton, rescanButton, topButton);
-                this.panelElement.append(titleElement, statusElement, actionsElement, bookmarkListElement);
+                this.panelElement.append(titleElement, statusElement, themeElement, actionsElement, bookmarkListElement);
 
                 this.applyCollapsedBlocks(blocks);
             });
