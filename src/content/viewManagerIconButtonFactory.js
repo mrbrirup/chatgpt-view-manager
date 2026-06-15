@@ -2,7 +2,15 @@
     "use strict";
 
     window.MrbrCvm = window.MrbrCvm || {};
-
+    /**
+     * @typedef {{
+     *     iconName: string,
+     *     title: string,
+     *     onClick: (event: MouseEvent) => void,
+     *     onMouseEnter?: (event: MouseEvent) => void,
+     *     onMouseLeave?: (event: MouseEvent) => void
+     * }} MrbrCvmIconButtonOptions
+     */
     /**
      * @typedef {{ getPath: (iconName: string) => string }} ViewManagerIconsType
      */
@@ -54,13 +62,7 @@
         /**
          * Creates a compact icon button.
          *
-         * @param {{
-         *     iconName: string,
-         *     title: string,
-         *     onClick: (event: MouseEvent) => void,
-         *     onMouseEnter?: (event: MouseEvent) => void,
-         *     onMouseLeave?: (event: MouseEvent) => void
-         * }} options
+         * @param {MrbrCvmIconButtonOptions} options
          * @returns {HTMLButtonElement}
          */
         createIconButton(options) {

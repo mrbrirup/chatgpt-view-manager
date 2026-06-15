@@ -33,16 +33,20 @@
      */
 
     /**
-     * @typedef {{
-     *     bookmarks: MrbrCvmBookmark[],
-     *     collapsedBlocks: MrbrCvmCollapsedBlock[]
-     * }} MrbrCvmConversationState
-     */
+    * @typedef {{
+    *     bookmarks: MrbrCvmBookmark[],
+    *     collapsedBlocks: MrbrCvmCollapsedBlock[]
+    * }} MrbrCvmConversationState
+    */
 
     /**
      * @typedef {{
      *     theme: "auto" | "dark" | "light",
-     *     isPanelCollapsed: boolean
+     *     isPanelCollapsed: boolean,
+     *     collapsedSections: {
+     *         bookmarks: boolean,
+     *         collapsedBlocks: boolean
+     *     }
      * }} MrbrCvmUiState
      */
 
@@ -71,8 +75,40 @@
      * }) => ViewManagerActionsDropdown} ViewManagerActionsDropdownConstructor
      */
 
+    /**
+     * @typedef {{
+     *     dialogTitle: string,
+     *     titleLabel: string,
+     *     notesLabel: string,
+     *     title: string,
+     *     notes?: string,
+     *     allowEmptyTitle?: boolean
+     * }} MrbrCvmTitleNotesEditorOptions
+     */
 
+    /**
+     * @typedef {{
+     *     title: string,
+     *     notes: string
+     * }} MrbrCvmTitleNotesEditorResult
+     */
 
+    /**
+     * @typedef {{
+     *     title: string,
+     *     label: string,
+     *     value: string
+     * }} MrbrCvmTextInputDialogOptions
+     */
+    /**
+     * @typedef {{
+     *     iconName: string,
+     *     title: string,
+     *     onClick: (event: MouseEvent) => void,
+     *     onMouseEnter?: (event: MouseEvent) => void,
+     *     onMouseLeave?: (event: MouseEvent) => void
+     * }} MrbrCvmIconButtonOptions
+     */
     /**
      * @typedef {{ get: (key: string) => string, format: (key: string, ...values: Array<string | number>) => string }} ViewManagerStringsType
      */
@@ -178,26 +214,17 @@
          */
         scanner = new ConversationScanner();
 
-        /**
-         * @type {{
-         *     bookmarks: Array<{ id: string, title: string, notes?: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string, updatedUtc?: string }>,
-         *     collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>,
-         *     ui: {
-         *         theme: "auto" | "dark" | "light",
-         *         isPanelCollapsed: boolean,
-         *         collapsedSections: {
-         *             bookmarks: boolean,
-         *             collapsedBlocks: boolean
-         *         }
-         *     }
-         * }}
-         */
+        /** @type {MrbrCvmConversationState & { ui: MrbrCvmUiState }} */
         state = {
             bookmarks: [],
             collapsedBlocks: [],
             ui: {
                 theme: "auto",
-                isPanelCollapsed: false
+                isPanelCollapsed: false,
+                collapsedSections: {
+                    bookmarks: false,
+                    collapsedBlocks: false
+                }
             }
         };
 
@@ -236,24 +263,16 @@
          */
         iconButtonFactory = new ViewManagerIconButtonFactory();
 
-        /**
-         * @type {{
-         *     version: number,
-         *     globalUi: {
-         *         theme: "auto" | "dark" | "light",
-         *         isPanelCollapsed: boolean
-         *     },
-         *     conversations: Record<string, {
-         *         bookmarks: Array<{ id: string, title: string, notes?: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string, updatedUtc?: string }>,
-         *         collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
-         *     }>
-         * }}
-         */
+        /** @type {MrbrCvmStorageRoot} */
         storageRoot = {
             version: 2,
             globalUi: {
                 theme: "auto",
-                isPanelCollapsed: false
+                isPanelCollapsed: false,
+                collapsedSections: {
+                    bookmarks: false,
+                    collapsedBlocks: false
+                }
             },
             conversations: {}
         };
@@ -275,6 +294,23 @@
                 this.startLocationObserver();
             });
         }
+
+        /**
+         * Creates the default UI state.
+         *
+         * @returns {MrbrCvmUiState}
+         */
+        createDefaultUiState() {
+            return {
+                theme: "auto",
+                isPanelCollapsed: false,
+                collapsedSections: {
+                    bookmarks: false,
+                    collapsedBlocks: false
+                }
+            };
+        }
+
         /**
         * Watches for single-page-app URL changes.
         *
@@ -309,10 +345,10 @@
             });
         }
         /**
-         * Loads persisted state from chrome.storage.local.
-         *
-         * @returns {Promise<void>}
-         */
+        * Loads persisted state from chrome.storage.local.
+        *
+        * @returns {Promise<void>}
+        */
         async loadState() {
             this.conversationKey = this.getConversationKey();
 
@@ -320,16 +356,19 @@
                 savedState = result[MrbrChatGptViewManager.STORAGE_KEY];
 
             if (!savedState || typeof savedState !== "object") {
+                const conversationState = this.createEmptyConversationState();
+
                 this.storageRoot = {
                     version: 2,
-                    globalUi: this.normalizeUiState(null),
+                    globalUi: this.createDefaultUiState(),
                     conversations: {
-                        [this.conversationKey]: this.createEmptyConversationState()
+                        [this.conversationKey]: conversationState
                     }
                 };
 
                 this.state = {
-                    ...this.createEmptyConversationState(),
+                    bookmarks: conversationState.bookmarks,
+                    collapsedBlocks: conversationState.collapsedBlocks,
                     ui: this.storageRoot.globalUi
                 };
 
@@ -337,17 +376,18 @@
             }
 
             if (savedState.version === 2 && savedState.conversations && typeof savedState.conversations === "object") {
+                const conversationState = this.normalizeConversationState(
+                    savedState.conversations[this.conversationKey]
+                );
+
                 this.storageRoot = {
                     version: 2,
                     globalUi: this.normalizeUiState(savedState.globalUi),
-                    conversations: savedState.conversations
+                    conversations: {
+                        ...savedState.conversations,
+                        [this.conversationKey]: conversationState
+                    }
                 };
-
-                const conversationState = this.normalizeConversationState(
-                    this.storageRoot.conversations[this.conversationKey]
-                );
-
-                this.storageRoot.conversations[this.conversationKey] = conversationState;
 
                 this.state = {
                     bookmarks: conversationState.bookmarks,
@@ -408,12 +448,9 @@
         }
 
         /**
-         * Gets a blank per-conversation state object.
+         * Creates an empty conversation-specific state.
          *
-         * @returns {{
-         *     bookmarks: Array<{ id: string, title: string, notes?: string, blockKey: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string, updatedUtc?: string }>,
-         *     collapsedBlocks: Array<{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }>
-         * }}
+         * @returns {MrbrCvmConversationState}
          */
         createEmptyConversationState() {
             return {
@@ -426,14 +463,7 @@
          * Gets a safe UI state.
          *
          * @param {any} ui
-         * @returns {{
-         *     theme: "auto" | "dark" | "light",
-         *     isPanelCollapsed: boolean,
-         *     collapsedSections: {
-         *         bookmarks: boolean,
-         *         collapsedBlocks: boolean
-         *     }
-         * }}
+         * @returns {MrbrCvmUiState}
          */
         normalizeUiState(ui) {
             return {
@@ -457,7 +487,7 @@
         normalizeConversationState(conversationState) {
             return {
                 bookmarks: Array.isArray(conversationState?.bookmarks)
-                    ? conversationState.bookmarks.map(/** @param {any} bookmark */ bookmark => ({
+                    ? conversationState.bookmarks.map(/** @param {MrbrCvmBookmark} bookmark */ bookmark => ({
                         ...bookmark,
                         title: typeof bookmark.title === "string"
                             ? bookmark.title
@@ -471,7 +501,7 @@
                     }))
                     : [],
                 collapsedBlocks: Array.isArray(conversationState?.collapsedBlocks)
-                    ? conversationState.collapsedBlocks.map(/** @param {any} collapsedBlock */ collapsedBlock => ({
+                    ? conversationState.collapsedBlocks.map(/** @param {MrbrCvmCollapsedBlock} collapsedBlock */ collapsedBlock => ({
                         ...collapsedBlock,
                         title: typeof collapsedBlock.title === "string" && collapsedBlock.title.trim()
                             ? collapsedBlock.title
@@ -778,7 +808,7 @@
         /**
         * Scrolls to a collapsed block placeholder or block.
         *
-        * @param {{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }} collapsedBlock
+        * @param {MrbrCvmCollapsedBlock} collapsedBlock
         * @returns {void}
         */
         goToCollapsedBlock(collapsedBlock) {
@@ -811,7 +841,7 @@
         /**
          * Forgets a collapsed block record and restores the block if currently hidden.
          *
-         * @param {{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }} collapsedBlock
+         * @param {MrbrCvmCollapsedBlock} collapsedBlock
          * @returns {Promise<void>}
          */
         async forgetCollapsedBlock(collapsedBlock) {
@@ -1180,8 +1210,8 @@
                 goButton = this.createIconButton({
                     iconName: "go",
                     title: this.getString("goToBookmark"),
-                    onClick: () => {
-                        this.goToBookmark(bookmark);
+                    onClick: async () => {
+                        await this.goToBookmark(bookmark);
                     }
                 }),
                 editButton = this.createIconButton({
@@ -1262,22 +1292,16 @@
             await this.saveState();
             this.render();
         }
-
         /**
          * Scrolls to a bookmark's block.
          *
-         * @param {{ id: string, title: string, blockKey?: string, blockIndex?: number, role?: string, contentHash?: string, createdUtc: string }} bookmark
-         * @returns {void}
+         * @param {MrbrCvmBookmark} bookmark
+         * @returns {Promise<void>}
          */
-        goToBookmark(bookmark) {
+        async goToBookmark(bookmark) {
             this.scanner.findBlocks();
 
-            const block = this.scanner.findBlockForBookmark(bookmark);
-
-            alert(this.formatString(
-                "couldNotFindBookmark",
-                this.getBookmarkTitle(bookmark, this.state.bookmarks.indexOf(bookmark))
-            ));
+            let block = this.scanner.findBlockForBookmark(bookmark);
 
             const matchingCollapsedBlock = this.state.collapsedBlocks.find(item => {
                 return item.blockKey === bookmark.blockKey
@@ -1289,7 +1313,7 @@
                     return item.blockKey !== matchingCollapsedBlock.blockKey;
                 });
 
-                this.saveState();
+                await this.saveState();
 
                 this.scheduleDomUpdate(() => {
                     const placeholder = this.findCollapsePlaceholder(matchingCollapsedBlock);
@@ -1298,18 +1322,48 @@
                         placeholder.remove();
                     }
 
+                    block = this.scanner.findBlockForBookmark(bookmark);
+
+                    if (!block) {
+                        alert(this.formatString(
+                            "couldNotFindBookmark",
+                            this.getBookmarkTitle(bookmark, this.state.bookmarks.indexOf(bookmark))
+                        ));
+
+                        this.render();
+                        return;
+                    }
+
                     block.classList.remove("mrbr-cvm-collapsed-block");
                     this.render();
+
+                    block.scrollIntoView({
+                        behavior: "smooth",
+                        block: "center"
+                    });
+
+                    this.flashBlock(block);
                 });
+
+                return;
+            }
+
+            if (!block) {
+                alert(this.formatString(
+                    "couldNotFindBookmark",
+                    this.getBookmarkTitle(bookmark, this.state.bookmarks.indexOf(bookmark))
+                ));
+
+                return;
             }
 
             this.scheduleDomUpdate(() => {
-                block.scrollIntoView({
+                (/** @type {HTMLElement} */ (block)).scrollIntoView({
                     behavior: "smooth",
                     block: "center"
                 });
 
-                this.flashBlock(block);
+                this.flashBlock((/** @type {HTMLElement} */ (block)));
             });
         }
 
@@ -1513,7 +1567,7 @@
          * Collapses a single block element and creates its placeholder.
          *
          * @param {HTMLElement} block
-         * @param {{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }} collapsedBlock
+         * @param {MrbrCvmCollapsedBlock} collapsedBlock
          * @returns {void}
          */
         collapseBlockElement(block, collapsedBlock) {
@@ -1580,7 +1634,7 @@
         /**
          * Finds an existing collapse placeholder.
          *
-         * @param {{ blockKey: string }} collapsedBlock
+         * @param {MrbrCvmCollapsedBlock} collapsedBlock
          * @returns {HTMLElement | null}
          */
         findCollapsePlaceholder(collapsedBlock) {
@@ -1592,7 +1646,7 @@
         /**
          * Restores one collapsed block.
          *
-         * @param {{ blockKey: string, blockIndex?: number, role?: string, contentHash?: string, title: string, collapsedUtc: string }} collapsedBlock
+         * @param {MrbrCvmCollapsedBlock} collapsedBlock
          * @returns {Promise<void>}
          */
         async restoreCollapsedBlock(collapsedBlock) {
@@ -1730,7 +1784,7 @@
         /**
         * Shows a non-blocking text input dialog.
         *
-        * @param {{ title: string, label: string, value: string }} options
+        * @param {MrbrCvmTextInputDialogOptions} options
         * @returns {Promise<string | null>}
         */
         showTextInputDialog(options) {
@@ -1844,13 +1898,7 @@
         /**
          * Creates a compact icon button.
          *
-         * @param {{
-         *     iconName: string,
-         *     title: string,
-         *     onClick: (event: MouseEvent) => void,
-         *     onMouseEnter?: (event: MouseEvent) => void,
-         *     onMouseLeave?: (event: MouseEvent) => void
-         * }} options
+         * @param {MrbrCvmIconButtonOptions} options
          * @returns {HTMLButtonElement}
          */
         createIconButton(options) {
@@ -1978,15 +2026,8 @@
         /**
          * Shows an editor dialog for a title and notes.
          *
-         * @param {{
-         *     dialogTitle: string,
-         *     titleLabel: string,
-         *     notesLabel: string,
-         *     title: string,
-         *     notes?: string,
-         *     allowEmptyTitle?: boolean
-         * }} options
-         * @returns {Promise<{ title: string, notes: string } | null>}
+         * @param {MrbrCvmTitleNotesEditorOptions} options
+         * @returns {Promise<MrbrCvmTitleNotesEditorResult | null>}
          */
         showTitleNotesEditorDialog(options) {
             return new Promise(resolve => {
@@ -2006,6 +2047,12 @@
 
                 let isResolved = false;
 
+                /**
+                 * Closes the dialog and resolves once.
+                 *
+                 * @param {MrbrCvmTitleNotesEditorResult | null} value
+                 * @returns {void}
+                 */
                 const closeDialog = value => {
                     if (isResolved) {
                         return;
@@ -2017,6 +2064,11 @@
                     resolve(value);
                 };
 
+                /**
+                 * Saves the current dialog values.
+                 *
+                 * @returns {void}
+                 */
                 const save = () => {
                     const title = titleInputElement.value.trim(),
                         notes = notesTextAreaElement.value.trim();

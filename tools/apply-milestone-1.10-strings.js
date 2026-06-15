@@ -392,7 +392,7 @@ const ViewManagerStrings = getViewManagerStrings();
     ];
 
     for (const [search, replacement] of replacements) {
-        text = replaceAll(text, search, replacement);
+        text = replaceAll(text, search, /** @type {any} */ (replacement));
     }
 
     text = text.replace(

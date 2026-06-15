@@ -1,6 +1,28 @@
 (() => {
     "use strict";
 
+    /**
+     * @typedef {{
+     *     id: string,
+     *     title: string,
+     *     notes?: string,
+     *     blockKey: string,
+     *     blockIndex?: number,
+     *     role?: string,
+     *     contentHash?: string,
+     *     createdUtc: string,
+     *     updatedUtc?: string
+     * }} MrbrCvmBookmark
+     */
+    /**
+     * @typedef {{
+     *     blockKey: string,
+     *     blockIndex: number,
+     *     role: string,
+     *     contentHash: string
+     * }} MrbrCvmBlockIdentity
+     */
+
     window.MrbrCvm = window.MrbrCvm || {};
 
     /**
@@ -232,7 +254,7 @@
          * This allows older bookmarks to keep working even if the full block key
          * changes slightly.
          *
-         * @param {{ blockKey?: string, role?: string, blockIndex?: number, contentHash?: string }} bookmark
+         * @param {MrbrCvmBookmark} bookmark
          * @returns {HTMLElement | null}
          */
         findBlockForBookmark(bookmark) {
@@ -272,7 +294,7 @@
          * Gets identity data from a block.
          *
          * @param {HTMLElement} block
-         * @returns {{ blockKey: string, blockIndex: number, role: string, contentHash: string }}
+         * @returns {MrbrCvmBlockIdentity}
          */
         getBlockIdentity(block) {
             const blockKey = block.getAttribute(ConversationScanner.BLOCK_KEY_ATTRIBUTE) || "",
@@ -304,7 +326,7 @@
         }
     }
 
-    
+
 
     window.MrbrCvm.ConversationScanner = ConversationScanner;
 })();
