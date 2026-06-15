@@ -4,7 +4,10 @@
     window.MrbrCvm = window.MrbrCvm || {};
 
     /**
-     * Central string registry for View Manager UI text.
+     * Central string provider for View Manager UI text.
+     *
+     * Currently returns default English strings.
+     * Later this can be changed to use chrome.i18n without changing UI code.
      */
     class ViewManagerStrings {
         /**
@@ -14,11 +17,11 @@
          * @returns {string}
          */
         static get(key) {
-            return ViewManagerStrings.english[key] || key;
+            return ViewManagerStrings.getDefaultString(key);
         }
 
         /**
-         * Formats a string using simple {0}, {1}, {2} placeholders.
+         * Formats a localized string using simple {0}, {1}, {2} placeholders.
          *
          * @param {string} key
          * @param {...string | number} values
@@ -35,11 +38,21 @@
         }
 
         /**
-         * English strings for the View Manager.
+         * Gets a default English string.
+         *
+         * @param {string} key
+         * @returns {string}
+         */
+        static getDefaultString(key) {
+            return ViewManagerStrings.defaultEnglish[key] || key;
+        }
+
+        /**
+         * Default English strings for the View Manager.
          *
          * @type {Readonly<Record<string, string>>}
          */
-        static english = {
+        static defaultEnglish = {
             viewManagerTitle: "View Manager",
             blocksDetected: "{0} blocks detected",
 

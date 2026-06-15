@@ -85,6 +85,6 @@ declare global {
     class ViewManagerStrings {
         static get(key: string): string;
         static format(key: string, ...values: Array<string | number>): string;
+        static getDefaultString(key: string): string;
     }
-
 }
