@@ -14,6 +14,8 @@ declare global {
         MrbrCvm?: {
             ConversationScanner?: typeof ConversationScanner;
             ViewManagerActionsDropdown?: typeof ViewManagerActionsDropdown;
+            ViewManagerIcons?: typeof ViewManagerIcons;
+            ViewManagerIconButtonFactory?: typeof ViewManagerIconButtonFactory;
         };
     }
 
@@ -59,4 +61,22 @@ declare global {
         createElement(): HTMLDivElement;
         dispose(): void;
     }
+
+    class ViewManagerIcons {
+        static getPath(iconName: string): string;
+    }
+
+    class ViewManagerIconButtonFactory {
+        createIconElement(iconName: string): SVGSVGElement;
+
+        createIconButton(options: {
+            iconName: string;
+            title: string;
+            onClick: (event: MouseEvent) => void;
+            onMouseEnter?: (event: MouseEvent) => void;
+            onMouseLeave?: (event: MouseEvent) => void;
+        }): HTMLButtonElement;
+    }
+
+
 }
