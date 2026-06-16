@@ -1262,10 +1262,12 @@
                     iconName: "top",
                     title: this.getString("scrollToTop"),
                     onClick: () => {
-                        window.scrollTo({
+                        const target = document.querySelector("div[data-scroll-root]");
+                        target?.scrollTo({
                             top: 0,
                             behavior: "smooth"
                         });
+
                     }
                 }),
                 filterControlElement = this.createFilterControlElement();

@@ -11,7 +11,7 @@
          * Gets the SVG path data for an icon.
          *
          * @param {string} iconName
-         * @returns {string}
+         * @returns {string|Array<string>} The SVG path data for the icon, or an array of path data strings for multi-path icons.
          */
         static getPath(iconName) {
             switch (iconName) {
@@ -34,7 +34,9 @@
                     return "M5 5h8v2H8.4l6.6 6.6-1.4 1.4L7 8.4V13H5V5zm12 2h2v12H7v-2h10V7z";
 
                 case "delete":
-                    return "M7 6h10l-1 14H8L7 6zm3-3h4l1 1h4v2H5V4h4l1-1zm0 6v8h2V9h-2zm4 0v8h2V9h-2z";
+                    return ["M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z",
+                        "M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"];
+                //"M7 6h10l-1 14H8L7 6zm3-3h4l1 1h4v2H5V4h4l1-1zm0 6v8h2V9h-2zm4 0v8h2V9h-2z";
 
                 case "expandPanel":
                     return "M5 5h14v2H5V5zm0 6h14v2H5v-2zm0 6h14v2H5v-2z";

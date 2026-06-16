@@ -18,5 +18,9 @@
     "include": [
         "src/**/*.js",
         "types/**/*.d.ts"
+    ],
+    "exclude": [
+        "tools/**/*",
+        "documents/**/*"
     ]
 }

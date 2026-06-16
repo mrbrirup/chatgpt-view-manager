@@ -67,7 +67,7 @@ declare global {
     }
 
     class ViewManagerIcons {
-        static getPath(iconName: string): string;
+        static getPath(iconName: string): string | Array<string>;
     }
 
     class ViewManagerIconButtonFactory {
