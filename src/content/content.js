@@ -1712,7 +1712,7 @@
                 return null;
             }
 
-            this.scrollTurnContainerIntoView(bookmark, "start");
+            await this.scrollTurnContainerIntoViewAndVerify(bookmark, "start", 4);
             await this.waitForTurnHydration(450);
 
             this.scheduleDomUpdate(() => {
@@ -1728,37 +1728,111 @@
          * @returns {Promise<HTMLElement | null>}
          */
         async findBlockByIdentityWithTurnContainer(item) {
-            this.scanner.findBlocks();
+            const maxRetries = 4,
+                initialRetryDelayMilliseconds = 150;
 
-            let block = this.scanner.findBlockForBookmark(item);
-
-            if (block) {
-                return block;
-            }
-
-            if (!this.scrollTurnContainerIntoView(item, "center")) {
-                return null;
-            }
-
-            await this.waitForTurnHydration(500);
-
-            block = this.scanner.findBlockForBookmark(item);
-
-            if (block) {
-                return block;
-            }
-            let waitForPaintPromise = Promise.withResolvers();
-            this.scrollTurnContainerIntoView(item, "start");
-            requestAnimationFrame(() => {
-                requestAnimationFrame(async () => {                    
-                    await this.waitForTurnHydration(700);
-                    waitForPaintPromise.resolve();
+            /**
+             * Waits for two animation frames so ChatGPT has time to paint/hydrate
+             * after the scroll position changes.
+             *
+             * @returns {Promise<void>}
+             */
+            const waitForTwoPaints = () => {
+                return new Promise(resolve => {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            resolve();
+                        });
+                    });
                 });
-            });
+            };
 
-            await waitForPaintPromise.promise;
+            /**
+             * Waits for a delay.
+             *
+             * @param {number} milliseconds
+             * @returns {Promise<void>}
+             */
+            const wait = milliseconds => {
+                return new Promise(resolve => {
+                    window.setTimeout(resolve, milliseconds);
+                });
+            };
 
-            return this.scanner.findBlockForBookmark(item);
+            /**
+             * Scans and tries to find the target block.
+             *
+             * @returns {HTMLElement | null}
+             */
+            const findAfterScan = () => {
+                this.scanner.findBlocks();
+
+                return this.scanner.findBlockForBookmark(item);
+            };
+
+            let block = findAfterScan();
+
+            if (block) {
+                return block;
+            }
+
+            if (await this.scrollTurnContainerIntoViewAndVerify(item, "center", maxRetries)) {
+                await waitForTwoPaints();
+                await this.waitForTurnHydration(500);
+
+                block = findAfterScan();
+
+                if (block) {
+                    return block;
+                }
+            }
+
+            for (let retryIndex = 0; retryIndex < maxRetries; retryIndex++) {
+                const retryDelayMilliseconds = initialRetryDelayMilliseconds * Math.pow(2, retryIndex),
+                    blockPosition = retryIndex % 2 === 0
+                        ? "start"
+                        : "center";
+
+                await wait(retryDelayMilliseconds);
+
+                block = findAfterScan();
+
+                if (block) {
+                    return block;
+                }
+
+                await this.scrollTurnContainerIntoViewAndVerify(item, blockPosition, maxRetries);
+                await waitForTwoPaints();
+                await this.waitForTurnHydration(retryDelayMilliseconds);
+
+                block = findAfterScan();
+
+                if (block) {
+                    return block;
+                }
+            }
+
+            return null;
+        }
+        /**
+         * Gets the visible ChatGPT fixed/sticky header height.
+         *
+         * @returns {number}
+         */
+        getFixedHeaderHeight() {
+            const headerElement = document.querySelector("#page-header[data-fixed-header]");
+
+            if (!(headerElement instanceof HTMLElement)) {
+                return 0;
+            }
+
+            const headerRect = headerElement.getBoundingClientRect();
+
+            if (headerRect.height <= 0) {
+                return 0;
+            }
+
+            return headerRect.height;
         }
         /**
          * Waits for the scroll root to settle, with a timeout fallback.
@@ -1796,7 +1870,110 @@
                 window.setTimeout(resolveOnce, milliseconds);
             });
         }
+        /**
+         * Scrolls a turn container into view and verifies that the scroll root reached
+         * the expected scroll position. Retries when ChatGPT virtualisation or layout
+         * changes interrupt the scroll.
+         *
+         * @param {MrbrCvmBookmark | MrbrCvmCollapsedBlock} item
+         * @param {ScrollLogicalPosition} [blockPosition]
+         * @param {number} [maxRetries]
+         * @returns {Promise<boolean>}
+         */
+        async scrollTurnContainerIntoViewAndVerify(item, blockPosition = "start", maxRetries = 4) {
+            const initialRetryDelayMilliseconds = 150,
+                scrollTolerancePixels = 16,
+                headerGapPixels = 8;
 
+            /**
+             * Waits for two animation frames.
+             *
+             * @returns {Promise<void>}
+             */
+            const waitForTwoPaints = () => {
+                return new Promise(resolve => {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            resolve();
+                        });
+                    });
+                });
+            };
+
+            /**
+             * Gets the target scroll position for the item.
+             *
+             * @returns {{ scrollRoot: HTMLElement, targetTop: number } | null}
+             */
+            const getScrollTarget = () => {
+                const scrollRoot = this.getScrollRoot(),
+                    turnContainer = this.findTurnContainer(item),
+                    fixedHeaderHeight = this.getFixedHeaderHeight(),
+                    headerOffset = fixedHeaderHeight + headerGapPixels;
+
+                if (!scrollRoot || !turnContainer) {
+                    return null;
+                }
+
+                const scrollRootRect = scrollRoot.getBoundingClientRect(),
+                    turnRect = turnContainer.getBoundingClientRect(),
+                    offsetTop = turnRect.top - scrollRootRect.top;
+
+                let targetTop = scrollRoot.scrollTop + offsetTop;
+
+                if (blockPosition === "center") {
+                    const visibleHeight = Math.max(0, scrollRoot.clientHeight - headerOffset);
+
+                    targetTop = targetTop - headerOffset - ((visibleHeight - turnRect.height) / 2);
+                } else if (blockPosition === "end") {
+                    targetTop = targetTop - scrollRoot.clientHeight + turnRect.height;
+                } else {
+                    targetTop = targetTop - headerOffset;
+                }
+
+                const maximumScrollTop = Math.max(0, scrollRoot.scrollHeight - scrollRoot.clientHeight);
+
+                targetTop = Math.max(0, Math.min(targetTop, maximumScrollTop));
+
+                return {
+                    scrollRoot,
+                    targetTop
+                };
+            };
+
+            for (let retryIndex = 0; retryIndex <= maxRetries; retryIndex++) {
+                const retryDelayMilliseconds = initialRetryDelayMilliseconds * Math.pow(2, retryIndex),
+                    scrollTarget = getScrollTarget();
+
+                if (!scrollTarget) {
+                    return false;
+                }
+
+                scrollTarget.scrollRoot.scrollTo({
+                    top: scrollTarget.targetTop,
+                    behavior: "smooth"
+                });
+
+                await this.waitForScrollSettle(retryDelayMilliseconds);
+                await waitForTwoPaints();
+
+                const refreshedScrollTarget = getScrollTarget();
+
+                if (!refreshedScrollTarget) {
+                    return false;
+                }
+
+                const scrollDifference = Math.abs(
+                    refreshedScrollTarget.scrollRoot.scrollTop - refreshedScrollTarget.targetTop
+                );
+
+                if (scrollDifference <= scrollTolerancePixels) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
         /**
          * Waits briefly for a turn to hydrate after scrolling.
          *
