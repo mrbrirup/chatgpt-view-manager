@@ -374,7 +374,7 @@
         }
 
         /**
-         * Re-renders only the bookmark and collapsed-block list area.
+         * Re-renders only the bookmark list area.
          *
          * @returns {void}
          */
@@ -388,8 +388,7 @@
 
             Draw.draw(() => {
                 listsContainerElement.replaceChildren(
-                    this.createBookmarksListElement(),
-                    this.createCollapsedBlocksListElement()
+                    this.createBookmarksListElement()
                 );
             });
         }
@@ -502,6 +501,7 @@
             this.scheduleDomUpdate(() => {
                 this.applyThemeClass();
                 this.scanner.findBlocks();
+                this.removeCollapsedBlocksDomStateForMvp();
                 this.createPanel();
                 this.render();
                 this.startMutationObserver();
@@ -555,6 +555,7 @@
             this.scheduleDomUpdate(() => {
                 this.applyThemeClass();
                 this.scanner.findBlocks();
+                this.removeCollapsedBlocksDomStateForMvp();
                 this.render();
             });
         }
@@ -965,6 +966,7 @@
          */
         render() {
             const self = this;
+
             self.scheduleDomUpdate(() => {
                 if (!self.panelElement) {
                     return;
@@ -974,13 +976,16 @@
                     self.renderCollapsedPanel();
                     return;
                 }
+
                 if (self.actionsDropdown) {
                     self.actionsDropdown.dispose();
                     self.actionsDropdown = null;
                 }
+
                 self.panelElement.innerHTML = "";
                 self.panelElement.classList.remove("mrbr-cvm-panel-collapsed");
                 self.#clearButton = null;
+
                 const headerElement = document.createElement("div"),
                     titleElement = document.createElement("h2"),
                     collapsePanelButton = self.createIconButton({
@@ -991,8 +996,8 @@
                         }
                     }),
                     statusElement = document.createElement("div"),
-                    toolbarElement = self.createToolbarElement(),
-                    blocks = self.scanner.findBlocks();
+                    blocks = self.scanner.findBlocks(),
+                    listsContainerElement = document.createElement("div");
 
                 headerElement.className = "mrbr-cvm-header";
 
@@ -1004,25 +1009,20 @@
                 statusElement.className = "mrbr-cvm-status";
                 statusElement.textContent = self.formatString("blocksDetected", blocks.length);
 
-                const listsContainerElement = document.createElement("div");
-
                 listsContainerElement.className = "mrbr-cvm-lists-container";
 
                 Draw.draw(() => {
                     listsContainerElement.append(
-                        self.createBookmarksListElement(),
-                        self.createCollapsedBlocksListElement()
+                        self.createBookmarksListElement()
                     );
 
                     self.panelElement.append(
                         headerElement,
                         statusElement,
-                        toolbarElement,
+                        self.createToolbarElement(),
                         listsContainerElement
                     );
                 });
-
-                self.applyCollapsedBlocks(blocks);
             });
         }
         /**
@@ -1114,25 +1114,77 @@
          * @returns {Promise<HTMLElement | null>} The placeholder element or null if not found.
          */
         async goToCollapsedBlock(collapsedBlock, reportNotFound = true) {
-            this.scanner.findBlocks();
-            this.applyCollapsedBlocks();
+            const maxRetries = 4,
+                initialRetryDelayMilliseconds = 150;
 
-            let placeholder = this.findCollapsePlaceholder(collapsedBlock);
+            /**
+             * Waits for two animation frames so ChatGPT has time to paint/hydrate
+             * after the scroll position changes or placeholders are applied.
+             *
+             * @returns {Promise<void>}
+             */
+            const waitForTwoPaints = () => {
+                return new Promise(resolve => {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            resolve();
+                        });
+                    });
+                });
+            };
+
+            /**
+             * Waits for a delay.
+             *
+             * @param {number} milliseconds
+             * @returns {Promise<void>}
+             */
+            const wait = milliseconds => {
+                return new Promise(resolve => {
+                    window.setTimeout(resolve, milliseconds);
+                });
+            };
+
+            /**
+             * Re-scans, reapplies collapsed state, waits for paint, then finds the placeholder.
+             *
+             * @returns {Promise<HTMLElement | null>}
+             */
+            const findPlaceholderAfterApply = async () => {
+                this.scanner.findBlocks();
+                this.applyCollapsedBlocks();
+
+                await waitForTwoPaints();
+
+                return this.findCollapsePlaceholder(collapsedBlock);
+            };
+
+            let placeholder = await findPlaceholderAfterApply();
 
             if (!placeholder) {
-                this.scrollTurnContainerIntoView(collapsedBlock, "center");
+                await this.scrollTurnContainerIntoViewAndVerify(collapsedBlock, "center", maxRetries);
                 await this.waitForTurnHydration(500);
 
-                this.applyCollapsedBlocks();
-                placeholder = this.findCollapsePlaceholder(collapsedBlock);
+                placeholder = await findPlaceholderAfterApply();
             }
 
-            if (!placeholder) {
-                this.scrollTurnContainerIntoView(collapsedBlock, "start");
-                await this.waitForTurnHydration(700);
+            for (let retryIndex = 0; !placeholder && retryIndex < maxRetries; retryIndex++) {
+                const retryDelayMilliseconds = initialRetryDelayMilliseconds * Math.pow(2, retryIndex),
+                    blockPosition = retryIndex % 2 === 0
+                        ? "start"
+                        : "center";
 
-                this.applyCollapsedBlocks();
-                placeholder = this.findCollapsePlaceholder(collapsedBlock);
+                await wait(retryDelayMilliseconds);
+
+                await this.scrollTurnContainerIntoViewAndVerify(
+                    collapsedBlock,
+                    blockPosition,
+                    maxRetries
+                );
+
+                await this.waitForTurnHydration(retryDelayMilliseconds);
+
+                placeholder = await findPlaceholderAfterApply();
             }
 
             if (!placeholder) {
@@ -1146,16 +1198,12 @@
                 return null;
             }
 
-            this.scheduleDomUpdate(() => {
-                placeholder.scrollIntoView({
-                    behavior: "smooth",
-                    block: "start"
-                });
+            await this.scrollTurnContainerIntoViewAndVerify(collapsedBlock, "start", maxRetries);
+            await this.waitForTurnHydration(450);
 
-                window.setTimeout(() => {
-                    this.flashBlock(placeholder);
-                }, 350);
-            });
+            placeholder = this.findCollapsePlaceholder(collapsedBlock) || placeholder;
+
+            this.flashBlock(placeholder);
 
             return placeholder;
         }
@@ -1172,26 +1220,6 @@
                     title: this.getString("bookmarkVisibleBlock"),
                     onClick: async () => {
                         await this.addBookmarkForVisibleBlock();
-                    }
-                }),
-                collapseButton = this.createIconButton({
-                    iconName: "collapse",
-                    title: this.getString("collapseHighlightedBlock"),
-                    onMouseEnter: () => {
-                        this.highlightCollapseTarget();
-                    },
-                    onMouseLeave: () => {
-                        this.clearCollapseTargetHighlight();
-                    },
-                    onClick: async () => {
-                        await this.collapseHighlightedBlock();
-                    }
-                }),
-                restoreAllButton = this.createIconButton({
-                    iconName: "restore",
-                    title: this.getString("restoreAllCollapsedBlocks"),
-                    onClick: async () => {
-                        await this.restoreAllCollapsedBlocks();
                     }
                 }),
                 rescanButton = this.createIconButton({
@@ -1216,8 +1244,6 @@
 
             leftToolbarElement.append(
                 bookmarkButton,
-                collapseButton,
-                restoreAllButton,
                 rescanButton,
                 topButton
             );
@@ -1682,24 +1708,7 @@
          * @returns {Promise<HTMLElement | null>} The block element or null if not found.
          */
         async goToBookmark(bookmark, reportNotFound = true) {
-            let block = await this.findBlockByIdentityWithTurnContainer(bookmark);
-
-            const matchingCollapsedBlock = this.state.collapsedBlocks.find(item => {
-                return (bookmark.turnId && item.turnId === bookmark.turnId)
-                    || (bookmark.blockKey && item.blockKey === bookmark.blockKey)
-                    || (bookmark.contentHash && item.contentHash === bookmark.contentHash);
-            });
-
-            if (matchingCollapsedBlock) {
-                this.state.collapsedBlocks = this.state.collapsedBlocks.filter(item => {
-                    return item.blockKey !== matchingCollapsedBlock.blockKey;
-                });
-
-                await this.saveState();
-                await this.restoreCollapsedBlockDomOnly(matchingCollapsedBlock);
-
-                block = await this.findBlockByIdentityWithTurnContainer(bookmark);
-            }
+            const block = await this.findBlockByIdentityWithTurnContainer(bookmark);
 
             if (!block) {
                 if (reportNotFound) {
@@ -1715,11 +1724,27 @@
             await this.scrollTurnContainerIntoViewAndVerify(bookmark, "start", 4);
             await this.waitForTurnHydration(450);
 
-            this.scheduleDomUpdate(() => {
-                this.flashBlock(block);
-            });
+            this.flashBlock(block);
 
             return block;
+        }
+        /**
+         * Removes collapsed-block DOM effects while the Collapsed Blocks feature is disabled for MVP.
+         *
+         * @returns {void}
+         */
+        removeCollapsedBlocksDomStateForMvp() {
+            document
+                .querySelectorAll(".mrbr-cvm-collapsed-block")
+                .forEach(element => {
+                    element.classList.remove("mrbr-cvm-collapsed-block");
+                });
+
+            document
+                .querySelectorAll(".mrbr-cvm-collapsed-placeholder")
+                .forEach(element => {
+                    element.remove();
+                });
         }
         /**
          * Finds a block, using the turn container to trigger hydration if needed.
@@ -2515,7 +2540,6 @@
                 this.scheduleDomUpdate(() => {
                     const blocks = this.scanner.findBlocks();
 
-                    this.applyCollapsedBlocks(blocks);
                     this.updateBlockCountStatus(blocks.length);
                 });
             }, 150);
