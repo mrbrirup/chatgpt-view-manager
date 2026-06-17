@@ -17,6 +17,7 @@
      *     id: string,
      *     title: string,
      *     notes?: string,
+     *     turnId?: string,
      *     blockKey: string,
      *     blockIndex?: number,
      *     role?: string,
@@ -28,6 +29,7 @@
 
     /**
      * @typedef {{
+     *     turnId?: string,
      *     blockKey: string,
      *     blockIndex?: number,
      *     role?: string,
@@ -118,6 +120,13 @@
      * }} MrbrCvmIconButtonOptions
      */
     /**
+     * @typedef {{
+     *     turnId?: string,
+     *     blockKey?: string,
+     *     contentHash?: string
+     * }} MrbrCvmTurnIdentity
+     */
+    /**
      * @typedef {{ get: (key: string) => string, format: (key: string, ...values: Array<string | number>) => string }} ViewManagerStringsType
      */
 
@@ -127,7 +136,6 @@
      * @returns {ViewManagerStringsType}
      */
     const getViewManagerStrings = () => {
-        console.log("getViewManagerStrings called")
         const viewManagerStrings = window.MrbrCvm?.ViewManagerStrings;
 
         if (!viewManagerStrings) {
@@ -136,7 +144,6 @@
 
         return viewManagerStrings;
     };
-    console.log("getViewManagerStrings calling")
     const ViewManagerStrings = getViewManagerStrings();
 
 
@@ -985,8 +992,6 @@
                     }),
                     statusElement = document.createElement("div"),
                     toolbarElement = self.createToolbarElement(),
-                    bookmarkSectionElement = self.createBookmarkSectionElement(),
-                    collapsedSectionElement = self.createCollapsedBlocksSectionElement(),
                     blocks = self.scanner.findBlocks();
 
                 headerElement.className = "mrbr-cvm-header";
@@ -1012,7 +1017,7 @@
                     self.panelElement.append(
                         headerElement,
                         statusElement,
-                        self.createToolbarElement(),
+                        toolbarElement,
                         listsContainerElement
                     );
                 });
@@ -1044,36 +1049,6 @@
             }
 
             return "Collapsed block";
-        }
-        /**
-         * Creates the collapsed blocks management section.
-         *
-         * @returns {HTMLDivElement}
-         */
-        createCollapsedBlocksSectionElement() {
-            const listElement = document.createElement("div");
-
-            listElement.className = "mrbr-cvm-compact-list";
-
-            if (this.state.collapsedBlocks.length === 0) {
-                const emptyElement = document.createElement("div");
-
-                emptyElement.className = "mrbr-cvm-empty-section";
-                emptyElement.textContent = this.getString("noCollapsedBlocks");
-
-                listElement.append(emptyElement);
-            } else {
-                for (const collapsedBlock of this.state.collapsedBlocks) {
-                    listElement.appendChild(this.createCollapsedBlockElement(collapsedBlock));
-                }
-            }
-
-            return this.createCompactSectionElement(
-                "collapsedBlocks",
-                this.getString("collapsedBlocksSectionTitle"),
-                this.state.collapsedBlocks.length,
-                listElement
-            );
         }
         /**
          * Creates a compact collapsed-block row for the View Manager overlay.
@@ -1140,100 +1115,35 @@
          */
         async goToCollapsedBlock(collapsedBlock, reportNotFound = true) {
             this.scanner.findBlocks();
+            this.applyCollapsedBlocks();
 
             let placeholder = this.findCollapsePlaceholder(collapsedBlock);
 
             if (!placeholder) {
-                const target = document.querySelector("div[data-scroll-root]"),
-                    maxRetries = 4,
-                    waitAfterScrollMilliseconds = 650;
+                this.scrollTurnContainerIntoView(collapsedBlock, "center");
+                await this.waitForTurnHydration(500);
 
-                if (!(target instanceof HTMLElement)) {
-                    if (reportNotFound) {
-                        alert(this.formatString(
-                            "couldNotFindCollapsedBlock",
-                            this.getCollapsedBlockTitle(collapsedBlock)
-                        ));
-                    }
+                this.applyCollapsedBlocks();
+                placeholder = this.findCollapsePlaceholder(collapsedBlock);
+            }
 
-                    return null;
+            if (!placeholder) {
+                this.scrollTurnContainerIntoView(collapsedBlock, "start");
+                await this.waitForTurnHydration(700);
+
+                this.applyCollapsedBlocks();
+                placeholder = this.findCollapsePlaceholder(collapsedBlock);
+            }
+
+            if (!placeholder) {
+                if (reportNotFound) {
+                    alert(this.formatString(
+                        "couldNotFindCollapsedBlock",
+                        this.getCollapsedBlockTitle(collapsedBlock)
+                    ));
                 }
 
-                /**
-                 * Scrolls the ChatGPT scroll root and waits for either scrollend or a timeout.
-                 *
-                 * @param {number} top
-                 * @returns {Promise<void>}
-                 */
-                const scrollAndWait = top => {
-                    return new Promise(resolve => {
-                        let isResolved = false;
-
-                        /**
-                         * Resolves the wait once.
-                         *
-                         * @returns {void}
-                         */
-                        const resolveOnce = () => {
-                            if (isResolved) {
-                                return;
-                            }
-
-                            isResolved = true;
-                            target.removeEventListener("scrollend", resolveOnce);
-                            resolve();
-                        };
-
-                        target.addEventListener("scrollend", resolveOnce, { once: true });
-                        console.log("Test scrolling to top: 4");
-                        document.querySelector(".not-print\\:overflow-y-auto").scrollTop = 0;
-                        // target.scrollTo({
-                        //     top,
-                        //     behavior: "smooth"
-                        // });
-
-                        window.setTimeout(resolveOnce, waitAfterScrollMilliseconds);
-                    });
-                };
-
-                /**
-                 * Re-scans and tries to find the placeholder.
-                 *
-                 * @returns {HTMLElement | null}
-                 */
-                const findPlaceholder = () => {
-                    this.scanner.findBlocks();
-
-                    return this.findCollapsePlaceholder(collapsedBlock);
-                };
-
-                await scrollAndWait(0);
-                placeholder = findPlaceholder();
-
-                let retryCount = 0;
-
-                while (!placeholder && retryCount++ < maxRetries) {
-                    await scrollAndWait(document.body.scrollHeight);
-                    placeholder = findPlaceholder();
-
-                    if (placeholder) {
-                        break;
-                    }
-
-                    await scrollAndWait(0);
-                    placeholder = findPlaceholder();
-                }
-
-                if (!placeholder) {
-                    if (reportNotFound) {
-                        alert(this.formatString(
-                            "couldNotFindCollapsedBlock",
-                            this.getCollapsedBlockTitle(collapsedBlock)
-                        ));
-                    }
-
-                    return null;
-                }
+                return null;
             }
 
             this.scheduleDomUpdate(() => {
@@ -1242,42 +1152,13 @@
                     block: "start"
                 });
 
-                this.flashBlock(placeholder);
+                window.setTimeout(() => {
+                    this.flashBlock(placeholder);
+                }, 350);
             });
 
             return placeholder;
         }
-        /**
-         * Creates the bookmark management section.
-         *
-         * @returns {HTMLDivElement}
-         */
-        createBookmarkSectionElement() {
-            const listElement = document.createElement("div");
-
-            listElement.className = "mrbr-cvm-compact-list";
-
-            if (this.state.bookmarks.length === 0) {
-                const emptyElement = document.createElement("div");
-
-                emptyElement.className = "mrbr-cvm-empty-section";
-                emptyElement.textContent = this.getString("noBookmarksYet");
-
-                listElement.append(emptyElement);
-            } else {
-                this.state.bookmarks.forEach((bookmark, index) => {
-                    listElement.append(this.createBookmarkElement(bookmark, index));
-                });
-            }
-
-            return this.createCompactSectionElement(
-                "bookmarks",
-                this.getString("bookmarksSectionTitle"),
-                this.state.bookmarks.length,
-                listElement
-            );
-        }
-
         /**
          * Creates the toolbar element.
          *
@@ -1325,14 +1206,7 @@
                     iconName: "top",
                     title: this.getString("scrollToTop"),
                     onClick: () => {
-                        const target = document.querySelector("div[data-scroll-root]");
-                        console.log("Test scrolling to top: 5");
-                        document.querySelector(".not-print\\:overflow-y-auto").scrollTop = 0;
-                        // target?.scrollTo({
-                        //     top: 0,
-                        //     behavior: "smooth"
-                        // });
-
+                        this.scrollChatRootTo(0);
                     }
                 }),
                 filterControlElement = this.createFilterControlElement();
@@ -1787,6 +1661,7 @@
                 id: crypto.randomUUID(),
                 title,
                 notes: "",
+                turnId: identity.turnId,
                 blockKey: identity.blockKey,
                 blockIndex: identity.blockIndex,
                 role: identity.role,
@@ -1837,20 +1712,11 @@
                 return null;
             }
 
+            this.scrollTurnContainerIntoView(bookmark, "start");
+            await this.waitForTurnHydration(450);
+
             this.scheduleDomUpdate(() => {
-                console.log("Test scrolling to top: 7", bookmark.turnId, bookmark.blockKey, bookmark.contentHash, block);
-                //document.querySelector(".not-print\\:overflow-y-auto").scrollTop = 0;
-
-                this.scrollTurnContainerIntoView(bookmark.turnId);
-
-                // block.scrollIntoView({
-                //     behavior: "smooth",
-                //     block: "start"
-                // });
-
-                window.setTimeout(() => {
-                    this.flashBlock(block);
-                }, 350);
+                this.flashBlock(block);
             });
 
             return block;
@@ -1870,53 +1736,81 @@
                 return block;
             }
 
-            const turnContainer = this.findTurnContainer(item);
-
-            if (!turnContainer) {
+            if (!this.scrollTurnContainerIntoView(item, "center")) {
                 return null;
             }
 
-            turnContainer.scrollIntoView({
-                behavior: "smooth",
-                block: "center"
-            });
-
-            await this.waitForTurnHydration(450);
+            await this.waitForTurnHydration(500);
 
             block = this.scanner.findBlockForBookmark(item);
 
             if (block) {
                 return block;
             }
-            console.log("Test scrolling to top: 8");
-            document.querySelector(".not-print\\:overflow-y-auto").scrollTop = 0;
-            // turnContainer.scrollIntoView({
-            //     behavior: "smooth",
-            //     block: "start"
-            // });
+            let waitForPaintPromise = Promise.withResolvers();
+            this.scrollTurnContainerIntoView(item, "start");
+            requestAnimationFrame(() => {
+                requestAnimationFrame(async () => {                    
+                    await this.waitForTurnHydration(700);
+                    waitForPaintPromise.resolve();
+                });
+            });
 
-            await this.waitForTurnHydration(650);
+            await waitForPaintPromise.promise;
 
             return this.scanner.findBlockForBookmark(item);
         }
+        /**
+         * Waits for the scroll root to settle, with a timeout fallback.
+         *
+         * @param {number} [milliseconds]
+         * @returns {Promise<void>}
+         */
+        waitForScrollSettle(milliseconds = 450) {
+            const scrollRoot = this.getScrollRoot();
+
+            return new Promise(resolve => {
+                if (!scrollRoot) {
+                    window.setTimeout(resolve, milliseconds);
+                    return;
+                }
+
+                let isResolved = false;
+
+                /**
+                 * Resolves once.
+                 *
+                 * @returns {void}
+                 */
+                const resolveOnce = () => {
+                    if (isResolved) {
+                        return;
+                    }
+
+                    isResolved = true;
+                    scrollRoot.removeEventListener("scrollend", resolveOnce);
+                    resolve();
+                };
+
+                scrollRoot.addEventListener("scrollend", resolveOnce, { once: true });
+                window.setTimeout(resolveOnce, milliseconds);
+            });
+        }
+
         /**
          * Waits briefly for a turn to hydrate after scrolling.
          *
          * @param {number} [milliseconds]
          * @returns {Promise<void>}
          */
-        waitForTurnHydration(milliseconds = 350) {
-            return new Promise(resolve => {
-                window.setTimeout(() => {
-                    this.scanner.findBlocks();
-                    resolve();
-                }, milliseconds);
-            });
+        async waitForTurnHydration(milliseconds = 450) {
+            await this.waitForScrollSettle(milliseconds);
+            this.scanner.findBlocks();
         }
         /**
          * Finds a ChatGPT turn container for a bookmark/collapsed block.
          *
-         * @param {{ turnId?: string, blockKey?: string, contentHash?: string }} item
+         * @param {MrbrCvmTurnIdentity} item
          * @returns {HTMLElement | null}
          */
         findTurnContainer(item) {
@@ -1934,7 +1828,7 @@
                 );
 
                 if (turnElement instanceof HTMLElement) {
-                    return turnElement;
+                    return turnElement.closest("[data-turn-id-container]") || turnElement;
                 }
             }
 
@@ -1952,101 +1846,6 @@
         }
 
         /**
-         * Finds a bookmark block by scrolling the ChatGPT scroll root and retrying.
-         *
-         * @param {MrbrCvmBookmark} bookmark
-         * @returns {Promise<HTMLElement | null>}
-         */
-        async findBookmarkBlockWithScrollRetry(bookmark) {
-            const scrollRoot = this.getScrollRoot();
-
-            if (!scrollRoot) {
-                return null;
-            }
-
-            const maxPasses = 4,
-                waitAfterScrollMilliseconds = 700;
-
-            /**
-             * Scrolls and waits for the DOM to settle.
-             *
-             * @param {number} top
-             * @returns {Promise<void>}
-             */
-            const scrollAndWait = top => {
-                return new Promise(resolve => {
-                    let isResolved = false;
-
-                    /**
-                     * Resolves once.
-                     *
-                     * @returns {void}
-                     */
-                    const resolveOnce = () => {
-                        if (isResolved) {
-                            return;
-                        }
-
-                        isResolved = true;
-                        scrollRoot.removeEventListener("scrollend", resolveOnce);
-                        resolve();
-                    };
-
-                    scrollRoot.addEventListener("scrollend", resolveOnce, { once: true });
-                    console.log("Test scrolling to top: 1");
-                    document.querySelector(".not-print\\:overflow-y-auto").scrollTop = 0;
-                    // scrollRoot.scrollTo({
-                    //     top: 0,
-                    //     behavior: "smooth"
-                    // });
-
-                    window.setTimeout(resolveOnce, waitAfterScrollMilliseconds);
-                });
-            };
-
-            /**
-             * Re-scans and tries to find the bookmark block.
-             *
-             * @returns {HTMLElement | null}
-             */
-            const findAfterScan = () => {
-                this.scanner.findBlocks();
-
-                return this.scanner.findBlockForBookmark(bookmark);
-            };
-
-            let block = findAfterScan();
-
-            if (block) {
-                return block;
-            }
-
-            await scrollAndWait(0);
-            block = findAfterScan();
-
-            if (block) {
-                return block;
-            }
-
-            for (let passIndex = 0; passIndex < maxPasses; passIndex++) {
-                await scrollAndWait(scrollRoot.scrollHeight);
-                block = findAfterScan();
-
-                if (block) {
-                    return block;
-                }
-
-                await scrollAndWait(0);
-                block = findAfterScan();
-
-                if (block) {
-                    return block;
-                }
-            }
-
-            return null;
-        }
-        /**
          * Gets the ChatGPT scroll root.
          *
          * @returns {HTMLElement | null}
@@ -2055,6 +1854,7 @@
             const selectors = [
                 ".not-print\\:overflow-y-auto",
                 "div[data-scroll-root]",
+                "[data-scroll-root]",
                 "main"
             ];
 
@@ -2081,46 +1881,42 @@
             if (!scrollRoot) {
                 return;
             }
-            console.log("Test scrolling to top: 2");
-            document.querySelector(".not-print\\:overflow-y-auto").scrollTop = 0;
-            // scrollRoot.scrollTo({
-            //     top,
-            //     behavior
-            // });
+
+            scrollRoot.scrollTo({
+                top,
+                behavior
+            });
         }
         /**
-        * Scrolls a turn container into view inside the ChatGPT scroll root.
-        *
-        * @param {string} turnId
-        * @returns {boolean}
-        */
-        scrollTurnContainerIntoView(turnId) {
-            const scrollRoot = this.getScrollRoot();
+         * Scrolls a turn container into view inside the ChatGPT scroll root.
+         *
+         * @param {MrbrCvmTurnIdentity} item
+         * @param {ScrollLogicalPosition} [blockPosition]
+         * @returns {boolean}
+         */
+        scrollTurnContainerIntoView(item, blockPosition = "start") {
+            const scrollRoot = this.getScrollRoot(),
+                turnContainer = this.findTurnContainer(item);
 
-            if (!scrollRoot) {
-                return false;
-            }
-
-            const turnContainer = document.querySelector(
-                `[data-turn-id-container="${CSS.escape(turnId)}"]`
-            );
-            console.log("Test scrolling to turnId: ", turnId, turnContainer);
-            if (!(turnContainer instanceof HTMLElement)) {
+            if (!scrollRoot || !turnContainer) {
                 return false;
             }
 
             const scrollRootRect = scrollRoot.getBoundingClientRect(),
                 turnRect = turnContainer.getBoundingClientRect(),
-                targetTop = scrollRoot.scrollTop + turnRect.top - scrollRootRect.top;
-            console.log("Test scrolling to top: 3");
-            document.querySelector(".not-print\\:overflow-y-auto").scrollTop = 0;
-            // scrollRoot.scrollTo({
-            //     top: targetTop,
-            //     behavior: "smooth"
-            // });
-            //this.scrollChatRootTo(targetTop, "smooth");
+                offsetTop = turnRect.top - scrollRootRect.top,
+                targetTop = scrollRoot.scrollTop + offsetTop;
 
-            //this.scrollChatRootTo(0);
+            let adjustedTop = targetTop;
+
+            if (blockPosition === "center") {
+                adjustedTop = targetTop - ((scrollRoot.clientHeight - turnRect.height) / 2);
+            }
+
+            scrollRoot.scrollTo({
+                top: Math.max(0, adjustedTop),
+                behavior: "smooth"
+            });
 
             return true;
         }
@@ -2428,11 +2224,28 @@
          * @returns {HTMLElement | null}
          */
         findCollapsePlaceholder(collapsedBlock) {
-            return document.querySelector(
-                `[data-mrbr-cvm-placeholder-key="${CSS.escape(collapsedBlock.blockKey)}"]`
-            );
-        }
+            if (collapsedBlock.turnId) {
+                const turnIdPlaceholder = document.querySelector(
+                    `[data-mrbr-cvm-placeholder-turn-id="${CSS.escape(collapsedBlock.turnId)}"]`
+                );
 
+                if (turnIdPlaceholder instanceof HTMLElement) {
+                    return turnIdPlaceholder;
+                }
+            }
+
+            if (collapsedBlock.blockKey) {
+                const keyPlaceholder = document.querySelector(
+                    `[data-mrbr-cvm-placeholder-key="${CSS.escape(collapsedBlock.blockKey)}"]`
+                );
+
+                if (keyPlaceholder instanceof HTMLElement) {
+                    return keyPlaceholder;
+                }
+            }
+
+            return null;
+        }
         /**
          * Restores a collapsed block.
          *
@@ -2457,29 +2270,6 @@
                 if (block) {
                     block.classList.remove("mrbr-cvm-collapsed-block");
                 }
-
-                this.render();
-            });
-        }
-
-        /**
-         * Restores all collapsed blocks.
-         *
-         * @returns {Promise<void>}
-         */
-        async restoreAllBlocks() {
-            this.state.collapsedBlocks = [];
-
-            await this.saveState();
-
-            this.scheduleDomUpdate(() => {
-                document
-                    .querySelectorAll(".mrbr-cvm-collapsed-block")
-                    .forEach(element => element.classList.remove("mrbr-cvm-collapsed-block"));
-
-                document
-                    .querySelectorAll(".mrbr-cvm-collapsed-placeholder")
-                    .forEach(element => element.remove());
 
                 this.render();
             });
