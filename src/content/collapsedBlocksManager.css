@@ -1,0 +1,30 @@
+:root {
+    --mrbr-cvm-collapsed-block-background: #eeefff;
+}
+
+:root.mrbr-cvm-theme-light,  :root.mrbr-cvm-theme-auto  {
+    --mrbr-cvm-collapsed-block-background: #eeefff;
+}
+
+:root.mrbr-cvm-theme-dark {
+    --mrbr-cvm-collapsed-block-background: #eeefff;
+}
+
+
+.mrbr-cvm-collapsed-block-target {
+    background-color: var(--mrbr-cvm-collapsed-block-background);
+}
+
+#actionBtn {
+    width: 32px;
+    height: 32px;
+    background-color:var(--mrbr-cvm-panel-background);
+    color: var(--mrbr-cvm-panel-foreground);
+    box-shadow: 5px 10px 19px -8px var(--mrbr-cvm-dialog-shadow);;
+    border-radius: var(--mrbr-cvm-panel-border-radius);
+    position: absolute;
+    left: 8px;
+
+    /* This makes the movement smooth */
+    transition: top 0.12s ease-out;
+}

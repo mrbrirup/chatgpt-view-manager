@@ -216,10 +216,31 @@
 
 
 
+    const CollapsedBlocksManager = window.MrbrCvm?.CollapsedBlocksManager;
+
+
+
+
     const MrbrChatGptViewManager = class {
+        #rootElement;
+        constructor() {
+            MrbrChatGptViewManager.collapsedBlocksManager = new CollapsedBlocksManager();
+            MrbrChatGptViewManager.collapsedBlocksManager.init();
+            let rootElement = this.getScrollRoot();
+            this.#rootElement = rootElement;
+            console.log('Root element:', rootElement);
+
+            //this.#rootElement = 
+            this.#rootElement.addEventListener('onEnterBlock', (event) => {
+                console.log('Mouse entered a block:', event.detail);
+            });
+            this.#rootElement.addEventListener('onExitBlock', (event) => {
+                console.log('Mouse exited a block:', event.detail);
+            });
+        }
         static PANEL_ID = "mrbr-cvm-panel";
         static STORAGE_KEY = "mrbrChatGptViewManagerState";
-
+        static collapsedBlocksManager;
         /**
          * @type {HTMLDivElement | null}
          */
@@ -3049,6 +3070,11 @@
 
             return this.formatString("bookmarkFallbackTitleWithIndex", index + 1);
         }
+        // static {
+        //     this.collapsedBlocksManager = new CollapsedBlocksManager();
+        //     this.collapsedBlocksManager.init();
+        // }
+
     }; // End of class: MrbrChatGptViewManager
 
 

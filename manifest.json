@@ -21,10 +21,12 @@
         "src/content/viewManagerIcons.js",
         "src/content/viewManagerIconButtonFactory.js",
         "src/content/viewManagerActionsDropdown.js",
+        "src/content/collapsedBlocksManager.js",
         "src/content/content.js"
       ],
       "css": [
-        "src/content/content.css"
+        "src/content/content.css",
+        "src/content/collapsedBlocksManager.css"
       ],
       "run_at": "document_idle"
     }
