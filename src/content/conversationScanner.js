@@ -249,41 +249,54 @@
         }
 
         /**
-         * Finds a block using bookmark identity.
+         * Finds a block for a bookmark or collapsed block identity.
          *
-         * This allows older bookmarks to keep working even if the full block key
-         * changes slightly.
-         *
-         * @param {MrbrCvmBookmark} bookmark
+         * @param {{ turnId?: string, blockKey?: string, contentHash?: string, role?: string, blockIndex?: number }} bookmark
          * @returns {HTMLElement | null}
          */
         findBlockForBookmark(bookmark) {
-            if (bookmark.blockKey) {
-                const exactBlock = this.findBlockByKey(bookmark.blockKey);
+            const blocks = this.findBlocks();
+            if (bookmark.turnId) {
+                const turnIdMatch = blocks.find(block => {
+                    return block.dataset.turnId === bookmark.turnId
+                        || block.dataset.turnIdContainer === bookmark.turnId
+                        || block.closest("[data-turn-id]")?.getAttribute("data-turn-id") === bookmark.turnId
+                        || block.closest("[data-turn-id-container]")?.getAttribute("data-turn-id-container") === bookmark.turnId;
+                });
 
-                if (exactBlock) {
-                    return exactBlock;
+                if (turnIdMatch) {
+                    return turnIdMatch;
+                }
+            }
+
+            if (bookmark.blockKey) {
+                const keyMatch = blocks.find(block => {
+                    return block.dataset.mrbrCvmBlockKey === bookmark.blockKey;
+                });
+
+                if (keyMatch) {
+                    return keyMatch;
                 }
             }
 
             if (bookmark.contentHash) {
-                const hashBlock = document.querySelector(
-                    `[${ConversationScanner.BLOCK_HASH_ATTRIBUTE}="${CSS.escape(bookmark.contentHash)}"]`
-                );
+                const hashMatch = blocks.find(block => {
+                    return block.dataset.mrbrCvmBlockHash === bookmark.contentHash;
+                });
 
-                if (hashBlock instanceof HTMLElement) {
-                    return hashBlock;
+                if (hashMatch) {
+                    return hashMatch;
                 }
             }
 
-            if (bookmark.role && bookmark.blockIndex) {
-                const roleIndexBlock = document.querySelector(
-                    `[${ConversationScanner.BLOCK_ROLE_ATTRIBUTE}="${CSS.escape(bookmark.role)}"]` +
-                    `[${ConversationScanner.BLOCK_INDEX_ATTRIBUTE}="${CSS.escape(String(bookmark.blockIndex))}"]`
-                );
+            if (bookmark.role && typeof bookmark.blockIndex === "number") {
+                const roleIndexMatch = blocks.find(block => {
+                    return block.dataset.mrbrCvmBlockRole === bookmark.role
+                        && Number(block.dataset.mrbrCvmBlockIndex || "-1") === bookmark.blockIndex;
+                });
 
-                if (roleIndexBlock instanceof HTMLElement) {
-                    return roleIndexBlock;
+                if (roleIndexMatch) {
+                    return roleIndexMatch;
                 }
             }
 
@@ -297,16 +310,22 @@
          * @returns {MrbrCvmBlockIdentity}
          */
         getBlockIdentity(block) {
-            const blockKey = block.getAttribute(ConversationScanner.BLOCK_KEY_ATTRIBUTE) || "",
-                blockIndexText = block.getAttribute(ConversationScanner.BLOCK_INDEX_ATTRIBUTE) || "0",
-                role = block.getAttribute(ConversationScanner.BLOCK_ROLE_ATTRIBUTE) || "unknown",
-                contentHash = block.getAttribute(ConversationScanner.BLOCK_HASH_ATTRIBUTE) || "";
-
+            const turnId1 = block.dataset.turnId
+                || block.dataset.turnIdContainer
+                || block.closest("[data-turn-id]")?.getAttribute("data-turn-id")
+                || block.closest("[data-turn-id-container]")?.getAttribute("data-turn-id-container")
+                || "";
+            console.log("getBlockIdentity: turnId:", turnId1);
             return {
-                blockKey,
-                blockIndex: Number.parseInt(blockIndexText, 10) || 0,
-                role,
-                contentHash
+                turnId: block.dataset.turnId
+                    || block.dataset.turnIdContainer
+                    || block.closest("[data-turn-id]")?.getAttribute("data-turn-id")
+                    || block.closest("[data-turn-id-container]")?.getAttribute("data-turn-id-container")
+                    || "",
+                blockKey: block.dataset.mrbrCvmBlockKey || "",
+                blockIndex: Number(block.dataset.mrbrCvmBlockIndex || "0"),
+                role: block.dataset.mrbrCvmBlockRole || "",
+                contentHash: block.dataset.mrbrCvmBlockHash || ""
             };
         }
 

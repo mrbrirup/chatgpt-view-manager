@@ -15,6 +15,7 @@
         "https://chatgpt.com/*"
       ],
       "js": [
+        "src/content/draw.js",
         "src/content/conversationScanner.js",
         "src/content/viewManagerStrings.js",
         "src/content/viewManagerIcons.js",
