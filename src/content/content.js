@@ -231,12 +231,12 @@
             console.log('Root element:', rootElement);
 
             //this.#rootElement = 
-            this.#rootElement.addEventListener('onEnterBlock', (event) => {
-                console.log('Mouse entered a block:', event.detail);
-            });
-            this.#rootElement.addEventListener('onExitBlock', (event) => {
-                console.log('Mouse exited a block:', event.detail);
-            });
+            // this.#rootElement.addEventListener('onEnterBlock', (event) => {
+            //     console.log('Mouse entered a block:', event.detail);
+            // });
+            // this.#rootElement.addEventListener('onExitBlock', (event) => {
+            //     console.log('Mouse exited a block:', event.detail);
+            // });
         }
         static PANEL_ID = "mrbr-cvm-panel";
         static STORAGE_KEY = "mrbrChatGptViewManagerState";
@@ -1729,6 +1729,7 @@
          * @returns {Promise<HTMLElement | null>} The block element or null if not found.
          */
         async goToBookmark(bookmark, reportNotFound = true) {
+            console.log("Going to bookmark:", JSON.stringify(bookmark));
             const block = await this.findBlockByIdentityWithTurnContainer(bookmark);
 
             if (!block) {

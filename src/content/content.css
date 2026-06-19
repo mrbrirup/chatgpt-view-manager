@@ -49,7 +49,7 @@
     --mrbr-cvm-flash-outline: #ff3333;
 
     --mrbr-cvm-button-background: #111111;
-    --mrbr-cvm-button-foreground: #dfdfdf;    
+    --mrbr-cvm-button-foreground: #dfdfdf;
 
 }
 
@@ -66,7 +66,7 @@
     --mrbr-cvm-panel-shadow: rgba(0, 0, 0, 0.18);
     --mrbr-cvm-button-background: #f5f5f5;
     --mrbr-cvm-button-foreground: #111111;
-    --mrbr-cvm-button-border: rgba( 0, 0, 0, 0.8);
+    --mrbr-cvm-button-border: rgba(0, 0, 0, 0.8);
     --mrbr-cvm-button-hover-background: #e8e8e8;
     --mrbr-cvm-button-active-background: #dddddd;
     --mrbr-cvm-button-active-border: #777777;
@@ -265,10 +265,12 @@
     justify-content: flex-end;
     gap: 0px;
 }
-.mrbr-cvm-dialog-actions > button:first-of-type {
+
+.mrbr-cvm-dialog-actions>button:first-of-type {
     border-radius: 1px 0 0 1px;
 }
-.mrbr-cvm-dialog-actions > button:last-of-type {
+
+.mrbr-cvm-dialog-actions>button:last-of-type {
     border-radius: 0 1px 1px 0;
     border-left: 0;
 }
@@ -308,14 +310,16 @@
     align-items: center;
     gap: 0px;
 }
-.mrbr-cvm-collapsed-placeholder > div:first-of-type{
+
+.mrbr-cvm-collapsed-placeholder>div:first-of-type {
     margin-left: 4px;
 }
-.mrbr-cvm-collapsed-placeholder > button:first-of-type{
+
+.mrbr-cvm-collapsed-placeholder>button:first-of-type {
     border-radius: 1px 0 0 1px;
 }
 
-.mrbr-cvm-collapsed-placeholder > button:last-of-type{
+.mrbr-cvm-collapsed-placeholder>button:last-of-type {
     border-radius: 0 1px 1px 0;
     border-left: 0;
 }
@@ -388,11 +392,12 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;    
+    gap: 8px;
     padding-bottom: 2px;
     margin-bottom: 4px;
     border-bottom: var(--mrbr-cvm-panel-border) solid 1px;
 }
+
 /* @media (prefers-color-scheme: light) {
     .mrbr-cvm-header {
         border-bottom-color: #cccccc;
@@ -489,7 +494,7 @@
 .mrbr-cvm-section-count {
     color: var(--mrbr-cvm-panel-muted-foreground);
     font-size: 11px;
-    display:none;
+    display: none;
 }
 
 .mrbr-cvm-empty-section {
@@ -503,6 +508,7 @@
     flex-direction: column;
     gap: 1px;
 }
+
 /* @media (prefers-color-scheme: light) {
     .mrbr-cvm-compact-list .mrbr-cvm-compact-row:nth-of-type(odd) {
         background-color: oklch(from var(--mrbr-cvm-button-background) calc(l - 0.1) c h);
@@ -516,31 +522,31 @@
 
 .mrbr-cvm-compact-row {
     display: grid;
-    gap:0px;
+    gap: 0px;
     grid-template-columns: auto auto auto minmax(0, 1fr);
     align-items: center;
     min-height: 28px;
 }
 
-.mrbr-cvm-compact-row > button:first-of-type {
-  border-radius: 1px 0 0 1px;
+.mrbr-cvm-compact-row>button:first-of-type {
+    border-radius: 1px 0 0 1px;
 }
 
-.mrbr-cvm-compact-row > button:last-of-type {
-  border-radius: 0 1px 1px 0;
-  border-left: 0;
+.mrbr-cvm-compact-row>button:last-of-type {
+    border-radius: 0 1px 1px 0;
+    border-left: 0;
 }
 
 
-.mrbr-cvm-compact-row  > button:not(:first-of-type):not(:last-of-type) {
+.mrbr-cvm-compact-row>button:not(:first-of-type):not(:last-of-type) {
     border-radius: 0;
     border-left: 0;
-    
+
 }
 
 
-.mrbr-cvm-compact-row > div {
-  padding-left: 4px;
+.mrbr-cvm-compact-row>div {
+    padding-left: 4px;
 }
 
 .mrbr-cvm-compact-row-collapsed {
@@ -694,26 +700,47 @@
     min-width: 0;
 }
 
-.mrbr-cvm-toolbar-left {
+.mrbr-cvm-toolbar-left,
+.mrbr-cvm-toolbar-collapsed-block {
     display: flex;
     align-items: center;
     gap: 0px;
     flex: 0 0 auto;
+    /* position:absolute;
+    left: 0;
+    bottom: 0; */
 }
-.mrbr-cvm-toolbar-left > button:first-of-type {
+
+
+.mrbr-cvm-toolbar-left>button:first-of-type {
     border-radius: 1px 0 0 1px;
 }
-.mrbr-cvm-toolbar-left > button:last-of-type {
+
+.mrbr-cvm-toolbar-left>button:last-of-type {
     border-radius: 0 1px 1px 0;
     border-left: 0;
 }
-.mrbr-cvm-toolbar-left  > button:not(:first-of-type):not(:last-of-type) {
-    border-radius: 0;
-    border-left: 0;
-    
+
+.mrbr-cvm-toolbar-collapsed-block>.mrbr-cvm-icon-button {
+    cursor: pointer;
+    box-sizing: border-box;
+    color: var(--mrbr-cvm-button-foreground);
+    font-size: 12px;
+    margin: 2px 0px;
+    padding: var(--mrbr-cvm-panel-padding-button-padding);
+    border-radius: var(--mrbr-cvm-panel-border-radius);
+    background: var(--mrbr-cvm-button-background);
+    border: solid 1px var(--mrbr-cvm-button-border);
 }
 
+.mrbr-cvm-toolbar-collapsed-block>.mrbr-cvm-icon-button:first-of-type {
+    border-radius: 1px 0 0 1px;
+}
 
+.mrbr-cvm-toolbar-collapsed-block>.mrbr-cvm-icon-button:last-of-type {
+    border-radius: 0 1px 1px 0;
+    border-left: 0;
+}
 
 .mrbr-cvm-filter-control {
     display: grid;
@@ -809,4 +836,46 @@
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
-}    
+}
+
+
+/* 1. The Default State (Expanded / Natural Content Height) */
+div[data-mrbr-cvm-collapsing-wrapper] {
+    display: grid;
+    grid-template-rows: 1fr;
+    /* 1fr means "take up the full natural height" */
+    transition: grid-template-rows 0.5s ease-out;
+    /* Smoothly animate the change */
+}
+
+/* 2. The Shrunk State */
+div[data-mrbr-cvm-collapsing-wrapper].is-shrunk {
+    grid-template-rows: 0fr;
+    /* 0fr smoothly shrinks the height to zero */
+}
+
+/* 3. Safe Content Handling */
+section[data-mrbr-cvm-collapsing-content] {
+    overflow: hidden;
+    /* Prevents text from spilling out while shrinking */
+    min-height: 0;
+    /* Crucial: allows the grid row to shrink past the text size */
+}
+
+.mrbr-cvm-text-ellipsis {
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.mrbr-cvm-icon-button:first-of-type {
+    border-radius: 1px 0 0 1px;
+}
+
+.mrbr-cvm-toolbar>.mrbr-cvm-toolbar-collapsed-block-label {
+    border-radius: 1px;
+    width: 100%;
+    padding: 3px;
+    margin: 0px 4px;
+
+}
