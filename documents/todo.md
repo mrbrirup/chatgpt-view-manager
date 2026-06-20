@@ -18,3 +18,6 @@
 [ ] Restore block
 [ ] Add smooth expand animation when expanding a block.
 
+### Saving files
+
+- [ ] Todo: Something to do {5829528c-3aac-424b-820d-ca7c5d1198f7} (2026-06-20 17:43:04)

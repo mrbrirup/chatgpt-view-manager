@@ -496,12 +496,14 @@
         createCollapsedBlockInfo(conversationId, turnIdContainer, turnId, labelText) {
             return /** @type {CollapsedBlockInfo} */ ({ conversationId, turnId, turnIdContainer, label: labelText, timestamp: new Date().toISOString() });
         }
-        /**
+                /**
          * Todo: Something to do
          * Group: Saving files
-         * Id: {aaaa-bbbb-cccc-dddd-eeeeeeeeeeee}
-         * Date: 2024-06-20
-         * Time: 12:34:56
+         * Id: {5829528c-3aac-424b-820d-ca7c5d1198f7}
+         * Date: 2026-06-20
+         * Time: 17:43:04
+         * Status: Open
+         * Completed: 
          */
 
         /**
