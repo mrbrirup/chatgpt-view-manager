@@ -1,10 +1,19 @@
 (() => {
+    /**
+     * @typedef {{
+     * conversationId: string,
+     * turnIdContainer: string,
+     * turnId: string,
+     * label: string,
+     * timestamp: string
+     * }} CollapsedBlockInfo
+     */
     class CollapsedBlocksManager {
         /**
          * Static property to store collapsed blocks for each conversation.
          * The outer Map's key is the conversation identifier (string).
          * The inner Map's key is the turnId (string), and its value is an object containing:
-         * @type {Map<string, Map<string, { turnId: string, label: string, timestamp: string }>>}
+         * @type {Map<string, Map<string, CollapsedBlockInfo>>}
          */
         static collapsedBlocks = new Map(); // Map to store collapsed blocks with their unique identifiers
         /**
@@ -433,7 +442,7 @@
         wireEvents() {
             const
                 self = this,
-                container = /** @type {HTMLElement} */ (self.rootElement);            
+                container = /** @type {HTMLElement} */ (self.rootElement);
 
             container.addEventListener('mouseover', self.containerMouseOverHandler.bind(self));
 
@@ -444,25 +453,57 @@
             self.hoverButton.addEventListener('click', self.hoverButtonClickHandler.bind(self));
 
             container.addEventListener('input', self.rootElementInputHandler.bind(self));
-            
+
             document.addEventListener('mousemove', self.rootElementMouseMoveHandler.bind(self));
         }
+
+        /**
+         * 
+         * @param {string} turnId 
+         * @param {string} labelText 
+         */
         tryUpdateConversationCollapsedBlock(turnId, labelText) {
+            const self = this;
             let key = this.tryAddConversation();
             if (key && turnId) {
                 let collapsedBlocksForConversation = this.tryGetCollapsedBlocksForCurrentConversation();
+                if (!collapsedBlocksForConversation) {
+                    console.warn("CollapsedBlocksManager: No collapsed blocks found for the current conversation.");
+                    return;
+                }
                 if (collapsedBlocksForConversation.has(turnId)) {
-                    let collapsedBlockInfo = collapsedBlocksForConversation.get(turnId);
+                    let collapsedBlockInfo = /** @type {CollapsedBlockInfo} */ (collapsedBlocksForConversation.get(turnId));
                     collapsedBlockInfo.label = labelText;
                     collapsedBlockInfo.timestamp = new Date().toISOString();
                 }
                 else {
-                    let collapseBlockInfo = { turnId, label: labelText, timestamp: new Date().toISOString() };
+                    let collapseBlockInfo = self.createCollapsedBlockInfo(key, turnId, turnId, labelText);
                     collapsedBlocksForConversation.set(turnId, collapseBlockInfo);
                 }
                 console.log(collapsedBlocksForConversation);
             }
         }
+
+        /**
+         * @param {string} conversationId
+         * @param {string} turnId 
+         * @param {string} turnIdContainer
+         * @param {string} labelText 
+         * @returns {CollapsedBlockInfo} The created CollapsedBlockInfo object.
+         * 
+         * Creates a CollapsedBlockInfo object with the provided parameters.
+         */
+        createCollapsedBlockInfo(conversationId, turnIdContainer, turnId, labelText) {
+            return /** @type {CollapsedBlockInfo} */ ({ conversationId, turnId, turnIdContainer, label: labelText, timestamp: new Date().toISOString() });
+        }
+        /**
+         * Todo: Something to do
+         * Group: Saving files
+         * Id: {aaaa-bbbb-cccc-dddd-eeeeeeeeeeee}
+         * Date: 2024-06-20
+         * Time: 12:34:56
+         */
+
         /**
          * Gets normalized text for hashing and title generation.
          *
@@ -578,18 +619,29 @@
             return null;
         }
         /**
-         * @returns {string} The storage key for the current ChatGPT conversation.         
+         * @returns {string|null} The storage key for the current ChatGPT conversation.         
          */
         tryAddConversation() {
             const conversationKey = this.getConversationKey();
+            if (!conversationKey) {
+                console.warn("CollapsedBlocksManager: No conversation key found.");
+                return null;
+            }
             if (!CollapsedBlocksManager.collapsedBlocks.has(conversationKey)) {
                 CollapsedBlocksManager.collapsedBlocks.set(conversationKey, new Map());
             }
             console.log("CollapsedBlocksManager: Current conversation key:", conversationKey);
             return conversationKey;
         }
+        /**
+         * @returns {Map<string, CollapsedBlockInfo>|null} The collapsed blocks for the current ChatGPT conversation.
+         */
         tryGetCollapsedBlocksForCurrentConversation() {
             const conversationKey = this.getConversationKey();
+            if (!conversationKey) {
+                console.warn("CollapsedBlocksManager: No conversation key found.");
+                return null;
+            }
             var collapsedBlocks = CollapsedBlocksManager.collapsedBlocks.get(conversationKey);
             if (!collapsedBlocks) {
                 collapsedBlocks = new Map();
