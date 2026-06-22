@@ -21,6 +21,9 @@
         "src/content/viewManagerIcons.js",
         "src/content/viewManagerIconButtonFactory.js",
         "src/content/viewManagerActionsDropdown.js",
+        "src/content/viewManagerLocalPersistence.js",
+        "src/content/viewManagerNotesManager.js",
+        "src/content/viewManagerImportExport.js",
         "src/content/collapsedBlocksManager.js",
         "src/content/content.js"
       ],

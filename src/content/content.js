@@ -217,30 +217,78 @@
 
 
     const CollapsedBlocksManager = window.MrbrCvm?.CollapsedBlocksManager;
+    const ViewManagerLocalPersistence = window.MrbrCvm?.ViewManagerLocalPersistence;
+    const ViewManagerImportExport = window.MrbrCvm?.ViewManagerImportExport;
+    const ViewManagerNotesManager = window.MrbrCvm?.ViewManagerNotesManager;
 
+    if (!CollapsedBlocksManager) {
+        throw new Error("ChatGPT View Manager failed to load CollapsedBlocksManager.");
+    }
 
+    if (!ViewManagerLocalPersistence) {
+        throw new Error("ChatGPT View Manager failed to load ViewManagerLocalPersistence.");
+    }
+
+    if (!ViewManagerImportExport) {
+        throw new Error("ChatGPT View Manager failed to load ViewManagerImportExport.");
+    }
+
+    if (!ViewManagerNotesManager) {
+        throw new Error("ChatGPT View Manager failed to load ViewManagerNotesManager.");
+    }
 
 
     const MrbrChatGptViewManager = class {
         #rootElement;
         constructor() {
-            MrbrChatGptViewManager.collapsedBlocksManager = new CollapsedBlocksManager();
-            MrbrChatGptViewManager.collapsedBlocksManager.init();
+            this.persistence = new ViewManagerLocalPersistence({
+                storageKey: MrbrChatGptViewManager.STORAGE_KEY
+            });
+            this.notesManager = new ViewManagerNotesManager({
+                getState: () => this.state
+            });
+            this.importExport = new ViewManagerImportExport({
+                persistence: this.persistence,
+                strings: ViewManagerStrings,
+                scheduleDomUpdate: callback => this.scheduleDomUpdate(callback)
+            });
+
             let rootElement = this.getScrollRoot();
             this.#rootElement = rootElement;
-            console.log('Root element:', rootElement);
 
-            //this.#rootElement = 
-            // this.#rootElement.addEventListener('onEnterBlock', (event) => {
-            //     console.log('Mouse entered a block:', event.detail);
-            // });
-            // this.#rootElement.addEventListener('onExitBlock', (event) => {
-            //     console.log('Mouse exited a block:', event.detail);
-            // });
+            this.collapsedBlocksManager = new CollapsedBlocksManager({
+                scanner: this.scanner,
+                persistence: this.persistence,
+                notesManager: this.notesManager,
+                strings: ViewManagerStrings,
+                createIconButton: options => this.createIconButton(options),
+                scheduleDomUpdate: callback => this.scheduleDomUpdate(callback),
+                render: () => {
+                    this.syncStateReferences();
+                    this.render();
+                },
+                flashBlock: block => this.flashBlock(block),
+                getScrollRoot: () => this.getScrollRoot(),
+                scrollTurnContainerIntoViewAndVerify: (item, blockPosition, maxRetries) => {
+                    return this.scrollTurnContainerIntoViewAndVerify(item, blockPosition, maxRetries);
+                },
+                waitForTurnHydration: milliseconds => this.waitForTurnHydration(milliseconds)
+            });
+
+            MrbrChatGptViewManager.collapsedBlocksManager = this.collapsedBlocksManager;
+            this.collapsedBlocksManager.init();
         }
         static PANEL_ID = "mrbr-cvm-panel";
         static STORAGE_KEY = "mrbrChatGptViewManagerState";
         static collapsedBlocksManager;
+        /** @type {InstanceType<typeof ViewManagerLocalPersistence> | null} */
+        persistence = null;
+        /** @type {InstanceType<typeof ViewManagerNotesManager> | null} */
+        notesManager = null;
+        /** @type {InstanceType<typeof ViewManagerImportExport> | null} */
+        importExport = null;
+        /** @type {InstanceType<typeof CollapsedBlocksManager> | null} */
+        collapsedBlocksManager = null;
         /**
          * @type {HTMLDivElement | null}
          */
@@ -275,6 +323,16 @@
         * @type {number}
         */
         mutationRefreshTimeoutId = 0;
+
+        /**
+         * @type {number}
+         */
+        sharedStateRefreshTimeoutId = 0;
+
+        /**
+         * @type {boolean}
+         */
+        isSynchronizingSharedState = false;
 
         /**
          * @type {number}
@@ -409,7 +467,8 @@
 
             Draw.draw(() => {
                 listsContainerElement.replaceChildren(
-                    this.createBookmarksListElement()
+                    this.createBookmarksListElement(),
+                    this.createCollapsedBlocksListElement()
                 );
             });
         }
@@ -522,11 +581,12 @@
             this.scheduleDomUpdate(() => {
                 this.applyThemeClass();
                 this.scanner.findBlocks();
-                this.removeCollapsedBlocksDomStateForMvp();
+                this.applyCollapsedBlocks();
                 this.createPanel();
                 this.render();
                 this.startMutationObserver();
                 this.startLocationObserver();
+                this.startSharedStateObserver();
             });
         }
 
@@ -566,6 +626,90 @@
         }
 
         /**
+         * Watches for this tab becoming active and for changes saved by other tabs.
+         *
+         * @returns {void}
+         */
+        startSharedStateObserver() {
+            const scheduleActiveMerge = () => {
+                if (document.visibilityState === "hidden") {
+                    return;
+                }
+
+                this.scheduleSharedStateRefresh(true);
+            };
+
+            document.addEventListener("visibilitychange", scheduleActiveMerge);
+            window.addEventListener("focus", scheduleActiveMerge);
+
+            chrome.storage?.onChanged?.addListener?.((changes, areaName) => {
+                if (areaName !== "local" || !changes[MrbrChatGptViewManager.STORAGE_KEY]) {
+                    return;
+                }
+
+                if (document.visibilityState === "hidden") {
+                    return;
+                }
+
+                this.scheduleSharedStateRefresh(false);
+            });
+        }
+
+        /**
+         * Debounces shared-state refreshes.
+         *
+         * @param {boolean} persistMerged
+         * @returns {void}
+         */
+        scheduleSharedStateRefresh(persistMerged) {
+            window.clearTimeout(this.sharedStateRefreshTimeoutId);
+
+            this.sharedStateRefreshTimeoutId = window.setTimeout(() => {
+                this.sharedStateRefreshTimeoutId = 0;
+
+                this.syncSharedStateFromStorage(persistMerged).catch(error => {
+                    console.error("ChatGPT View Manager shared state sync failed.", error);
+                });
+            }, 100);
+        }
+
+        /**
+         * Merges bookmarks, collapsed blocks, and notes from the latest shared storage
+         * into this tab's current conversation state.
+         *
+         * @param {boolean} persistMerged
+         * @returns {Promise<void>}
+         */
+        async syncSharedStateFromStorage(persistMerged) {
+            if (!this.persistence || this.isSynchronizingSharedState) {
+                return;
+            }
+
+            this.isSynchronizingSharedState = true;
+
+            try {
+                const changed = await this.persistence.mergeCurrentConversationFromStorage({
+                    persistMerged
+                });
+
+                this.syncStateReferences();
+
+                if (!changed) {
+                    return;
+                }
+
+                this.scheduleDomUpdate(() => {
+                    this.applyThemeClass();
+                    this.scanner.findBlocks();
+                    this.applyCollapsedBlocks();
+                    this.render();
+                });
+            } finally {
+                this.isSynchronizingSharedState = false;
+            }
+        }
+
+        /**
          * Reloads conversation-scoped state after navigation.
          *
          * @returns {Promise<void>}
@@ -576,7 +720,7 @@
             this.scheduleDomUpdate(() => {
                 this.applyThemeClass();
                 this.scanner.findBlocks();
-                this.removeCollapsedBlocksDomStateForMvp();
+                this.applyCollapsedBlocks();
                 this.render();
             });
         }
@@ -586,75 +730,28 @@
         * @returns {Promise<void>}
         */
         async loadState() {
-            this.conversationKey = this.getConversationKey();
-
-            const result = await chrome.storage.local.get(MrbrChatGptViewManager.STORAGE_KEY),
-                savedState = result[MrbrChatGptViewManager.STORAGE_KEY];
-
-            if (!savedState || typeof savedState !== "object") {
-                const conversationState = this.createEmptyConversationState();
-
-                this.storageRoot = {
-                    version: 2,
-                    globalUi: this.createDefaultUiState(),
-                    conversations: {
-                        [this.conversationKey]: conversationState
-                    }
-                };
-
-                this.state = {
-                    bookmarks: conversationState.bookmarks,
-                    collapsedBlocks: conversationState.collapsedBlocks,
-                    blockNotes: conversationState.blockNotes,
-                    ui: this.storageRoot.globalUi
-                };
-
-                return;
+            if (!this.persistence) {
+                throw new Error("View Manager persistence has not been initialised.");
             }
 
-            if (savedState.version === 2 && savedState.conversations && typeof savedState.conversations === "object") {
-                const conversationState = this.normalizeConversationState(
-                    savedState.conversations[this.conversationKey]
-                );
-
-                this.storageRoot = {
-                    version: 2,
-                    globalUi: this.normalizeUiState(savedState.globalUi),
-                    conversations: {
-                        ...savedState.conversations,
-                        [this.conversationKey]: conversationState
-                    }
-                };
-
-                this.state = {
-                    bookmarks: conversationState.bookmarks,
-                    collapsedBlocks: conversationState.collapsedBlocks,
-                    blockNotes: conversationState.blockNotes,
-                    ui: this.storageRoot.globalUi
-                };
-
-                return;
-            }
-
-            const migratedConversationState = this.normalizeConversationState(savedState);
-
-            this.storageRoot = {
-                version: 2,
-                globalUi: this.normalizeUiState(savedState.ui),
-                conversations: {
-                    [this.conversationKey]: migratedConversationState
-                }
-            };
-
-            this.state = {
-                bookmarks: migratedConversationState.bookmarks,
-                collapsedBlocks: migratedConversationState.collapsedBlocks,
-                blockNotes: migratedConversationState.blockNotes,
-                ui: this.storageRoot.globalUi
-            };
-
-            await this.saveState();
+            await this.persistence.loadState();
+            this.syncStateReferences();
         }
+        /**
+         * Synchronises manager field references after persistence load/save.
+         *
+         * @returns {void}
+         */
+        syncStateReferences() {
+            if (!this.persistence) {
+                return;
+            }
+
+            this.conversationKey = this.persistence.conversationKey;
+            this.storageRoot = this.persistence.storageRoot;
+            this.state = this.persistence.state;
+        }
+
         /**
          * Applies the selected theme class to the document root.
          *
@@ -677,13 +774,12 @@
          * @returns {string}
          */
         getConversationKey() {
-            const url = new URL(window.location.href);
+            const url = new URL(window.location.href),
+                path = url.pathname.length > 1
+                    ? url.pathname.replace(/\/$/, "")
+                    : url.pathname;
 
-            if (url.pathname.startsWith("/c/")) {
-                return `${url.origin}${url.pathname}`;
-            }
-
-            return `${url.origin}${url.pathname}`;
+            return `${url.origin}${path}`;
         }
 
         /**
@@ -849,22 +945,13 @@
          *
          * @returns {Promise<void>}
          */
-        async saveState() {
-            if (!this.conversationKey) {
-                this.conversationKey = this.getConversationKey();
+        async saveState(options = {}) {
+            if (!this.persistence) {
+                throw new Error("View Manager persistence has not been initialised.");
             }
 
-            this.storageRoot.version = 2;
-            this.storageRoot.globalUi = this.state.ui;
-            this.storageRoot.conversations[this.conversationKey] = {
-                bookmarks: this.state.bookmarks,
-                collapsedBlocks: this.state.collapsedBlocks,
-                blockNotes: this.state.blockNotes
-            };
-
-            await chrome.storage.local.set({
-                [MrbrChatGptViewManager.STORAGE_KEY]: this.storageRoot
-            });
+            await this.persistence.saveState(this.state, options);
+            this.syncStateReferences();
         }
         /**
          * Gets tooltip text for a block-level note.
@@ -887,18 +974,7 @@
          * @returns {void}
          */
         setBlockNotes(blockKey, notes) {
-            const trimmedNotes = notes.trim();
-
-            if (!trimmedNotes) {
-                delete this.state.blockNotes[blockKey];
-                return;
-            }
-
-            this.state.blockNotes[blockKey] = {
-                blockKey,
-                notes: trimmedNotes,
-                updatedUtc: new Date().toISOString()
-            };
+            this.notesManager.setBlockNotes(blockKey, notes);
         }
         /**
          * Gets notes for a conversation block.
@@ -907,11 +983,7 @@
          * @returns {string}
          */
         getBlockNotes(blockKey) {
-            if (!blockKey) {
-                return "";
-            }
-
-            return this.state.blockNotes[blockKey]?.notes || "";
+            return this.notesManager.getBlockNotes(blockKey);
         }
         /**
          * Creates the floating panel.
@@ -950,34 +1022,8 @@
                 return;
             }
 
-            const identity = this.scanner.getBlockIdentity(block),
-                title = this.scanner.getBlockTitle(block);
-
-            if (!identity.blockKey) {
-                alert(this.getString("selectedBlockInvalidKey"));
-                return;
-            }
-
-            const alreadyCollapsed = this.state.collapsedBlocks.some(item => {
-                return item.blockKey === identity.blockKey
-                    || item.contentHash === identity.contentHash;
-            });
-
-            if (!alreadyCollapsed) {
-                this.state.collapsedBlocks.push({
-                    turnId: identity.turnId,
-                    blockKey: identity.blockKey,
-                    blockIndex: identity.blockIndex,
-                    role: identity.role,
-                    contentHash: identity.contentHash,
-                    title,
-                    notes: this.getBlockNotes(identity.blockKey),
-                    collapsedUtc: new Date().toISOString()
-                });
-            }
-
-            await this.saveState();
-            this.applyCollapsedBlocks();
+            await this.collapsedBlocksManager.collapseBlock(block);
+            this.syncStateReferences();
             this.render();
         }
         /**
@@ -1034,7 +1080,8 @@
 
                 Draw.draw(() => {
                     listsContainerElement.append(
-                        self.createBookmarksListElement()
+                        self.createBookmarksListElement(),
+                        self.createCollapsedBlocksListElement()
                     );
 
                     self.panelElement.append(
@@ -1053,23 +1100,7 @@
          * @returns {string}
          */
         getCollapsedBlockTitle(collapsedBlock) {
-            if (collapsedBlock.title && collapsedBlock.title.trim()) {
-                return collapsedBlock.title.trim();
-            }
-
-            if (collapsedBlock.role && typeof collapsedBlock.blockIndex === "number") {
-                return `${collapsedBlock.role} block ${collapsedBlock.blockIndex + 1}`;
-            }
-
-            if (collapsedBlock.role) {
-                return `${collapsedBlock.role} block`;
-            }
-
-            if (typeof collapsedBlock.blockIndex === "number") {
-                return `Collapsed block ${collapsedBlock.blockIndex + 1}`;
-            }
-
-            return "Collapsed block";
+            return this.collapsedBlocksManager?.getCollapsedBlockTitle(collapsedBlock) || "Collapsed block";
         }
         /**
          * Creates a compact collapsed-block row for the View Manager overlay.
@@ -1102,7 +1133,7 @@
                             return item.blockKey !== collapsedBlock.blockKey;
                         });
 
-                        await this.saveState();
+                        await this.saveState({ mergeFromStorage: false });
 
                         this.scheduleDomUpdate(() => {
                             this.applyCollapsedBlocks();
@@ -1135,98 +1166,7 @@
          * @returns {Promise<HTMLElement | null>} The placeholder element or null if not found.
          */
         async goToCollapsedBlock(collapsedBlock, reportNotFound = true) {
-            const maxRetries = 4,
-                initialRetryDelayMilliseconds = 150;
-
-            /**
-             * Waits for two animation frames so ChatGPT has time to paint/hydrate
-             * after the scroll position changes or placeholders are applied.
-             *
-             * @returns {Promise<void>}
-             */
-            const waitForTwoPaints = () => {
-                return new Promise(resolve => {
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            resolve();
-                        });
-                    });
-                });
-            };
-
-            /**
-             * Waits for a delay.
-             *
-             * @param {number} milliseconds
-             * @returns {Promise<void>}
-             */
-            const wait = milliseconds => {
-                return new Promise(resolve => {
-                    window.setTimeout(resolve, milliseconds);
-                });
-            };
-
-            /**
-             * Re-scans, reapplies collapsed state, waits for paint, then finds the placeholder.
-             *
-             * @returns {Promise<HTMLElement | null>}
-             */
-            const findPlaceholderAfterApply = async () => {
-                this.scanner.findBlocks();
-                this.applyCollapsedBlocks();
-
-                await waitForTwoPaints();
-
-                return this.findCollapsePlaceholder(collapsedBlock);
-            };
-
-            let placeholder = await findPlaceholderAfterApply();
-
-            if (!placeholder) {
-                await this.scrollTurnContainerIntoViewAndVerify(collapsedBlock, "center", maxRetries);
-                await this.waitForTurnHydration(500);
-
-                placeholder = await findPlaceholderAfterApply();
-            }
-
-            for (let retryIndex = 0; !placeholder && retryIndex < maxRetries; retryIndex++) {
-                const retryDelayMilliseconds = initialRetryDelayMilliseconds * Math.pow(2, retryIndex),
-                    blockPosition = retryIndex % 2 === 0
-                        ? "start"
-                        : "center";
-
-                await wait(retryDelayMilliseconds);
-
-                await this.scrollTurnContainerIntoViewAndVerify(
-                    collapsedBlock,
-                    blockPosition,
-                    maxRetries
-                );
-
-                await this.waitForTurnHydration(retryDelayMilliseconds);
-
-                placeholder = await findPlaceholderAfterApply();
-            }
-
-            if (!placeholder) {
-                if (reportNotFound) {
-                    alert(this.formatString(
-                        "couldNotFindCollapsedBlock",
-                        this.getCollapsedBlockTitle(collapsedBlock)
-                    ));
-                }
-
-                return null;
-            }
-
-            await this.scrollTurnContainerIntoViewAndVerify(collapsedBlock, "start", maxRetries);
-            await this.waitForTurnHydration(450);
-
-            placeholder = this.findCollapsePlaceholder(collapsedBlock) || placeholder;
-
-            this.flashBlock(placeholder);
-
-            return placeholder;
+            return this.collapsedBlocksManager.goToCollapsedBlock(collapsedBlock, reportNotFound);
         }
         /**
          * Creates the toolbar element.
@@ -1304,32 +1244,9 @@
          * @returns {Promise<void>}
          */
         async restoreAllCollapsedBlocks() {
-            const collapsedBlocks = [...this.state.collapsedBlocks];
-
-            if (!collapsedBlocks.length) {
-                return;
-            }
-
-            this.state.collapsedBlocks = [];
-
-            await this.saveState();
-
-            this.scheduleDomUpdate(() => {
-                collapsedBlocks.forEach(collapsedBlock => {
-                    const placeholder = this.findCollapsePlaceholder(collapsedBlock),
-                        block = this.scanner.findBlockForBookmark(collapsedBlock);
-
-                    if (placeholder) {
-                        placeholder.remove();
-                    }
-
-                    if (block) {
-                        block.classList.remove("mrbr-cvm-collapsed-block");
-                    }
-                });
-
-                this.render();
-            });
+            await this.collapsedBlocksManager.restoreAllCollapsedBlocks();
+            this.syncStateReferences();
+            this.render();
         }
         /**
          * Creates the bookmarks list element.
@@ -1421,34 +1338,7 @@
          * @returns {Promise<void>}
          */
         async exportState() {
-            await this.saveState();
-
-            const exportData = {
-                exportedBy: this.getString("exportedBy"),
-                exportedUtc: new Date().toISOString(),
-                storageKey: MrbrChatGptViewManager.STORAGE_KEY,
-                activeConversationKey: this.conversationKey,
-                data: this.storageRoot
-            },
-                json = JSON.stringify(exportData, null, 4),
-                blob = new Blob([json], {
-                    type: "application/json"
-                }),
-                objectUrl = URL.createObjectURL(blob),
-                anchorElement = document.createElement("a");
-
-            anchorElement.href = objectUrl;
-            anchorElement.download = this.createExportFileName();
-
-            this.scheduleDomUpdate(() => {
-                document.documentElement.append(anchorElement);
-                anchorElement.click();
-                anchorElement.remove();
-
-                window.setTimeout(() => {
-                    URL.revokeObjectURL(objectUrl);
-                }, 1000);
-            });
+            await this.importExport.exportState();
         }
         /**
          * Checks whether a value looks like a version 2 storage root.
@@ -1457,13 +1347,7 @@
          * @returns {boolean}
          */
         isValidStorageRoot(value) {
-            return value
-                && typeof value === "object"
-                && value.version === 2
-                && value.globalUi
-                && typeof value.globalUi === "object"
-                && value.conversations
-                && typeof value.conversations === "object";
+            return this.persistence?.isValidStorageRoot(value) === true;
         }
 
         /**
@@ -1473,18 +1357,7 @@
          * @returns {MrbrCvmStorageRoot}
          */
         normalizeStorageRoot(importedRoot) {
-            /** @type {Record<string, MrbrCvmConversationState>} */
-            const conversations = {};
-
-            for (const [conversationKey, conversationState] of Object.entries(importedRoot.conversations || {})) {
-                conversations[conversationKey] = this.normalizeConversationState(conversationState);
-            }
-
-            return {
-                version: 2,
-                globalUi: this.normalizeUiState(importedRoot.globalUi),
-                conversations
-            };
+            return this.persistence.normalizeStorageRoot(importedRoot);
         }
         /**
         * Imports View Manager state from a JSON file.
@@ -1492,50 +1365,20 @@
         * @returns {Promise<void>}
         */
         async importState() {
-            const jsonText = await this.readImportFileText();
+            const imported = await this.importExport.importState();
 
-            if (!jsonText) {
+            if (!imported) {
                 return;
             }
 
-            let parsed;
-
-            try {
-                parsed = JSON.parse(jsonText);
-            } catch (error) {
-                alert(this.getString("importFailedInvalidJson"));
-                console.error(this.getString("importJsonParseFailed"), error);
-                return;
-            }
-
-            const importedRoot = parsed?.data || parsed;
-
-            if (!this.isValidStorageRoot(importedRoot)) {
-                alert(this.getString("importFailedInvalidData"));
-                return;
-            }
-
-            const shouldImport = confirm(this.getString("importConfirmMessage"));
-
-            if (!shouldImport) {
-                return;
-            }
-
-            this.storageRoot = this.normalizeStorageRoot(importedRoot);
-
-            await chrome.storage.local.set({
-                [MrbrChatGptViewManager.STORAGE_KEY]: this.storageRoot
-            });
-
-            await this.loadState();
+            this.syncStateReferences();
 
             this.scheduleDomUpdate(() => {
                 this.applyThemeClass();
                 this.scanner.findBlocks();
+                this.applyCollapsedBlocks();
                 this.render();
             });
-
-            alert(this.getString("importSuccessMessage"));
         }
 
         /**
@@ -1544,40 +1387,7 @@
          * @returns {Promise<string | null>}
          */
         readImportFileText() {
-            return new Promise(resolve => {
-                const inputElement = document.createElement("input");
-
-                inputElement.type = "file";
-                inputElement.accept = "application/json,.json";
-
-                inputElement.addEventListener("change", async () => {
-                    const file = inputElement.files?.[0];
-
-                    inputElement.remove();
-
-                    if (!file) {
-                        resolve(null);
-                        return;
-                    }
-
-                    try {
-                        resolve(await file.text());
-                    } catch (error) {
-                        console.error(this.getString("importFileReadFailed"), error);
-                        resolve(null);
-                    }
-                });
-
-                inputElement.addEventListener("cancel", () => {
-                    inputElement.remove();
-                    resolve(null);
-                });
-
-                this.scheduleDomUpdate(() => {
-                    document.documentElement.append(inputElement);
-                    inputElement.click();
-                });
-            });
+            return this.importExport.readImportFileText();
         }
 
         /**
@@ -1586,11 +1396,7 @@
          * @returns {string}
          */
         createExportFileName() {
-            const timestamp = new Date()
-                .toISOString()
-                .replace(/[:.]/g, "-");
-
-            return `${this.getString("exportFilePrefix")}-${timestamp}.json`;
+            return this.importExport.createExportFileName();
         }
         /**
          * Creates one compact theme toggle icon button.
@@ -1655,7 +1461,7 @@
                     onClick: async () => {
                         this.state.bookmarks = this.state.bookmarks.filter(item => item.id !== bookmark.id);
 
-                        await this.saveState();
+                        await this.saveState({ mergeFromStorage: false });
                         this.render();
                     }
                 }),
@@ -1756,12 +1562,6 @@
          * @returns {void}
          */
         removeCollapsedBlocksDomStateForMvp() {
-            document
-                .querySelectorAll(".mrbr-cvm-collapsed-block")
-                .forEach(element => {
-                    element.classList.remove("mrbr-cvm-collapsed-block");
-                });
-
             document
                 .querySelectorAll(".mrbr-cvm-collapsed-placeholder")
                 .forEach(element => {
@@ -2153,15 +1953,10 @@
         restoreCollapsedBlockDomOnly(collapsedBlock) {
             return new Promise(resolve => {
                 this.scheduleDomUpdate(() => {
-                    const placeholder = this.findCollapsePlaceholder(collapsedBlock),
-                        block = this.scanner.findBlockForBookmark(collapsedBlock);
-
-                    if (placeholder) {
-                        placeholder.remove();
-                    }
+                    const block = this.collapsedBlocksManager.findElementForCollapsedBlock(collapsedBlock);
 
                     if (block) {
-                        block.classList.remove("mrbr-cvm-collapsed-block");
+                        this.collapsedBlocksManager.restoreCollapsedBlockDomOnlyForElement(block);
                     }
 
                     this.render();
@@ -2313,39 +2108,10 @@
         * @returns {Promise<void>}
         */
         async collapseBlock(block) {
-            const identity = this.scanner.getBlockIdentity(block),
-                title = this.scanner.getBlockTitle(block);
-
-            if (!identity.blockKey) {
-                alert("The selected block does not have a valid block key.");
-                return;
-            }
-
-            const alreadyCollapsed = this.state.collapsedBlocks.some(item => {
-                return item.blockKey === identity.blockKey
-                    || item.contentHash === identity.contentHash;
-            });
-
-            if (!alreadyCollapsed) {
-                this.state.collapsedBlocks.push({
-                    turnId: identity.turnId,
-                    blockKey: identity.blockKey,
-                    blockIndex: identity.blockIndex,
-                    role: identity.role,
-                    contentHash: identity.contentHash,
-                    title,
-                    notes: this.getBlockNotes(identity.blockKey),
-                    collapsedUtc: new Date().toISOString()
-                });
-            }
+            await this.collapsedBlocksManager.collapseBlock(block);
             this.clearCollapseTargetHighlight();
-
-            await this.saveState();
-
-            this.scheduleDomUpdate(() => {
-                this.applyCollapsedBlocks();
-                this.render();
-            });
+            this.syncStateReferences();
+            this.render();
         }
         /**
          * Applies collapsed state to all matching blocks.
@@ -2354,19 +2120,7 @@
          * @returns {void}
          */
         applyCollapsedBlocks(blocks) {
-            const currentBlocks = blocks || this.scanner.findBlocks();
-
-            this.removeOrphanedCollapsePlaceholders();
-
-            for (const collapsedBlock of this.state.collapsedBlocks) {
-                const block = this.scanner.findBlockForBookmark(collapsedBlock);
-
-                if (!block || !currentBlocks.includes(block)) {
-                    continue;
-                }
-
-                this.collapseBlockElement(block, collapsedBlock);
-            }
+            this.collapsedBlocksManager.applyPersistedCollapsedBlocks(blocks);
         }
 
         /**
@@ -2377,18 +2131,7 @@
          * @returns {void}
          */
         collapseBlockElement(block, collapsedBlock) {
-            this.scheduleDomUpdate(() => {
-                const existingPlaceholder = this.findCollapsePlaceholder(collapsedBlock);
-
-                block.classList.add("mrbr-cvm-collapsed-block");
-
-                if (existingPlaceholder) {
-                    return;
-                }
-
-                const placeholderElement = this.createCollapsePlaceholder(collapsedBlock);
-                Draw.draw(() => { block.insertAdjacentElement("beforebegin", placeholderElement); });
-            });
+            this.collapsedBlocksManager.applyCollapsedBlockToElement(block, collapsedBlock);
         }
 
         /**
@@ -2398,47 +2141,13 @@
          * @returns {HTMLDivElement}
          */
         createCollapsePlaceholder(collapsedBlock) {
-            const containerElement = document.createElement("div"),
-                title = this.getCollapsedBlockTitle(collapsedBlock),
-                blockNotes = this.getBlockNotes(collapsedBlock.blockKey),
-                expandButton = this.createIconButton({
-                    iconName: "restore",
-                    title: this.getString("expandCollapsedBlock"),
-                    onClick: async () => {
-                        await this.restoreCollapsedBlock(collapsedBlock);
-                    }
-                }),
-                noteButton = this.createIconButton({
-                    iconName: "note",
-                    title: blockNotes
-                        ? `${this.getString("hasNotes")}: ${blockNotes}`
-                        : this.getString("noNotes"),
-                    onClick: async () => {
-                        await this.editCollapsedBlockNotes(collapsedBlock);
-                    }
-                }),
-                titleElement = document.createElement("div");
+            const placeholderElement = document.createElement("div");
 
-            containerElement.className = "mrbr-cvm-collapsed-placeholder";
-            containerElement.setAttribute("data-mrbr-cvm-placeholder-key", collapsedBlock.blockKey);
+            placeholderElement.className = "mrbr-cvm-collapsed-placeholder";
+            placeholderElement.setAttribute("data-mrbr-cvm-placeholder-key", collapsedBlock.blockKey || "");
+            placeholderElement.textContent = this.getCollapsedBlockTitle(collapsedBlock);
 
-            if (collapsedBlock.turnId) {
-                containerElement.setAttribute("data-mrbr-cvm-placeholder-turn-id", collapsedBlock.turnId);
-            }
-
-            if (blockNotes) {
-                noteButton.classList.add("mrbr-cvm-note-button-active");
-            }
-
-            titleElement.className = "mrbr-cvm-collapsed-placeholder-title";
-            titleElement.title = blockNotes
-                ? `${title}\n\n${blockNotes}\n\n${collapsedBlock.blockKey}`
-                : `${title}\n${collapsedBlock.blockKey}`;
-            titleElement.textContent = title;
-
-            containerElement.append(expandButton, noteButton, titleElement);
-
-            return containerElement;
+            return placeholderElement;
         }
 
         /**
@@ -2448,27 +2157,7 @@
          * @returns {HTMLElement | null}
          */
         findCollapsePlaceholder(collapsedBlock) {
-            if (collapsedBlock.turnId) {
-                const turnIdPlaceholder = document.querySelector(
-                    `[data-mrbr-cvm-placeholder-turn-id="${CSS.escape(collapsedBlock.turnId)}"]`
-                );
-
-                if (turnIdPlaceholder instanceof HTMLElement) {
-                    return turnIdPlaceholder;
-                }
-            }
-
-            if (collapsedBlock.blockKey) {
-                const keyPlaceholder = document.querySelector(
-                    `[data-mrbr-cvm-placeholder-key="${CSS.escape(collapsedBlock.blockKey)}"]`
-                );
-
-                if (keyPlaceholder instanceof HTMLElement) {
-                    return keyPlaceholder;
-                }
-            }
-
-            return null;
+            return this.collapsedBlocksManager.findElementForCollapsedBlock(collapsedBlock);
         }
         /**
          * Restores a collapsed block.
@@ -2477,27 +2166,9 @@
          * @returns {Promise<void>}
          */
         async restoreCollapsedBlock(collapsedBlock) {
-            this.state.collapsedBlocks = this.state.collapsedBlocks.filter(item => {
-                return item.blockKey !== collapsedBlock.blockKey;
-            });
-
-            await this.saveState();
-
-            this.scheduleDomUpdate(() => {
-                const placeholder = this.findCollapsePlaceholder(collapsedBlock),
-                    block = this.scanner.findBlockForBookmark(collapsedBlock);
-
-                if (placeholder) {
-                    placeholder.remove();
-                }
-
-
-                if (block) {
-                    block.classList.remove("mrbr-cvm-collapsed-block");
-                }
-
-                this.render();
-            });
+            await this.collapsedBlocksManager.restoreCollapsedBlock(collapsedBlock);
+            this.syncStateReferences();
+            this.render();
         }
 
         /**
@@ -2506,17 +2177,7 @@
          * @returns {void}
          */
         removeOrphanedCollapsePlaceholders() {
-            const collapsedKeys = new Set(this.state.collapsedBlocks.map(item => item.blockKey));
-
-            document
-                .querySelectorAll(".mrbr-cvm-collapsed-placeholder")
-                .forEach(element => {
-                    const key = element.getAttribute("data-mrbr-cvm-placeholder-key");
-
-                    if (!key || !collapsedKeys.has(key)) {
-                        element.remove();
-                    }
-                });
+            this.collapsedBlocksManager.removeOrphanedCollapsedDomState();
         }
         /**
          * Schedules DOM work for the next animation frame.
@@ -2563,6 +2224,7 @@
                 this.scheduleDomUpdate(() => {
                     const blocks = this.scanner.findBlocks();
 
+                    this.applyCollapsedBlocks(blocks);
                     this.updateBlockCountStatus(blocks.length);
                 });
             }, 150);
