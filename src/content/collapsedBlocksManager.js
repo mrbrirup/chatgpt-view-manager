@@ -175,6 +175,20 @@
             return this.hoverButtonElement;
         }
 
+                                /**
+                 * Todo: Align the hover button and improve responsiveness to scrolling and resizing.
+                 * Group: UI
+                 * Label: bug
+                 * Description: Hover button is not aligned with the left edge of the conversation area and does not respond well to scrolling or resizing.
+                 * File: src/content/collapsedBlocksManager.js
+                 * Line: 178
+                 * Id: {5c5ed3ce-85bf-4df3-901e-286d9ceb4db9}
+                 * Date: 2026-06-22
+                 * Time: 18:17:37
+                 * Status: Open
+                 * Completed: 
+                 * GitUrl: https://github.com/mrbrirup/chatgpt-view-manager/issues/24
+                 */
         /**
          * @returns {HTMLButtonElement | null}
          */

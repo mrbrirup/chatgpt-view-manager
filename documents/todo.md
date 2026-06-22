@@ -35,3 +35,8 @@
 - [ ] Todo: Persist Collapsed Block State Across Sessions {25edba9f-6739-4192-8b98-53f2014dfc91} (2026-06-22 17:03:10) ([Source](../src/content/collapsedBlocksManager.js#L43)) ([GitHub Issue](https://github.com/mrbrirup/chatgpt-view-manager/issues/20))
 - [ ] Todo: Style Hover button Correctly {f846b1c4-59c2-454a-a478-32b3c283757c} (2026-06-22 17:04:10) ([Source](../src/content/collapsedBlocksManager.js#L57)) ([GitHub Issue](https://github.com/mrbrirup/chatgpt-view-manager/issues/21))
 - [ ] Todo: Navigate to top of block on Collapse {b83afc73-c3a8-4d76-88df-33a6c4c79253} (2026-06-22 17:14:15) ([Source](../src/content/collapsedBlocksManager.js#L71)) ([GitHub Issue](https://github.com/mrbrirup/chatgpt-view-manager/issues/22))
+
+### UI
+
+- [ ] Todo: Align the hover button and improve responsiveness to scrolling and resizing. Consider using IntersectionObserver for better performance. {1a23c534-2e9f-4d72-b900-a3613f62fed9} (2026-06-22 18:16:26) ([Source](../src/content/collapsedBlocksManager.js#L178)) ([GitHub Issue](https://github.com/mrbrirup/chatgpt-view-manager/issues/23))
+- [ ] Todo: Align the hover button and improve responsiveness to scrolling and resizing. {5c5ed3ce-85bf-4df3-901e-286d9ceb4db9} (2026-06-22 18:17:37) ([Source](../src/content/collapsedBlocksManager.js#L178)) ([GitHub Issue](https://github.com/mrbrirup/chatgpt-view-manager/issues/24))
