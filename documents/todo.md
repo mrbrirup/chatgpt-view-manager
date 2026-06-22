@@ -17,3 +17,7 @@
 
 [ ] Restore block
 [ ] Add smooth expand animation when expanding a block.
+
+### Sample group
+
+- [ ] Todo: Sample todo {8191ceb5-20ef-4b13-83a9-8639d5bf5928} (2026-06-22 14:27:29) ([Source](../src/content/conversationScanner.js#L1)) ([GitHub Issue](https://github.com/mrbrirup/chatgpt-view-manager/issues/14))

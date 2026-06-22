@@ -496,18 +496,20 @@
         createCollapsedBlockInfo(conversationId, turnIdContainer, turnId, labelText) {
             return /** @type {CollapsedBlockInfo} */ ({ conversationId, turnId, turnIdContainer, label: labelText, timestamp: new Date().toISOString() });
         }
-                                /**
-                 * Todo: Something to do
-                 * Group: Saving files
-                 * Label: 
-                 * Description: 
-                 * Id: {5829528c-3aac-424b-820d-ca7c5d1198f7}
-                 * Date: 2026-06-20
-                 * Time: 17:43:04
-                 * Status: Open
-                 * Completed: 
-                 * GitUrl: https://github.com/mrbrirup/chatgpt-view-manager/issues/3
-                 */
+                                                                /**
+                                 * Todo: Something to do
+                                 * Group: Saving files
+                                 * Label: 
+                                 * Description: 
+                                 * File: src/content/collapsedBlocksManager.js
+                                 * Line: 499
+                                 * Id: {5829528c-3aac-424b-820d-ca7c5d1198f7}
+                                 * Date: 2026-06-20
+                                 * Time: 17:43:04
+                                 * Status: Open
+                                 * Completed: 
+                                 * GitUrl: https://github.com/mrbrirup/chatgpt-view-manager/issues/3
+                                 */
 
         /**
          * Gets normalized text for hashing and title generation.
@@ -657,3 +659,17 @@
     }
     window.MrbrCvm.CollapsedBlocksManager = CollapsedBlocksManager;
 })()
+/**
+ * Todo: Something to do
+ * Group: Saving files
+ * Label: Just stuff
+ * Description: 
+ * File: src/content/collapsedBlocksManager.js
+ * Line: 662
+ * Id: {468f82c0-b526-4724-867a-1704db0ea359}
+ * Date: 2026-06-22
+ * Time: 13:01:47
+ * Status: Open
+ * Completed: 
+ * GitUrl: 
+ */
