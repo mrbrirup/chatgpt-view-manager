@@ -2491,6 +2491,7 @@
                     placeholder.remove();
                 }
 
+
                 if (block) {
                     block.classList.remove("mrbr-cvm-collapsed-block");
                 }
