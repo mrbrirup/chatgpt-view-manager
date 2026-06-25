@@ -425,6 +425,11 @@
     display: flex;
     flex-direction: column;
     gap: 1px;
+    max-height: min(32vh, 320px);
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
 }
 
 /* @media (prefers-color-scheme: light) {

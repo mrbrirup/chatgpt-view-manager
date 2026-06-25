@@ -36,10 +36,13 @@ The extension adds a compact floating panel to ChatGPT pages.
 The panel includes:
 
 * Detected conversation block count
-* Bookmark controls
+* Top and bottom conversation navigation
 * Search/filter box
 * Theme/export/import menu
 * Collapsible panel mode
+
+Bookmark, note, collapse, and restore actions are provided by the contextual
+Hover Toolbar on each conversation block.
 
 ### Conversation Bookmarks
 

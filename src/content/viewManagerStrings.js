@@ -56,15 +56,14 @@
             viewManagerTitle: "View Manager",
             blocksDetected: "{0} blocks detected",
 
-            bookmarkVisibleBlock: "Bookmark visible block",
             addBookmark: "Add bookmark",
             removeBookmark: "Remove bookmark",
             collapseHighlightedBlock: "Collapse highlighted block",
             collapseBlock: "Collapse block",
             restoreBlock: "Restore block",
             restoreAllCollapsedBlocks: "Restore all collapsed blocks",
-            rescanConversationBlocks: "Rescan conversation blocks",
             scrollToTop: "Scroll to top",
+            scrollToBottom: "Scroll to bottom",
             moreViewManagerActions: "More View Manager actions",
 
             expandViewManager: "Expand View Manager",
@@ -154,7 +153,6 @@
             filterItemsPlaceholder: "Filter",
             clearFilter: "Clear filter",
 
-            noteVisibleBlock: "Add/edit note for visible block",
             editBookmarkNotes: "Edit bookmark notes",
             editBookmarkNotesTitle: "Bookmark notes",
             editNotes: "Edit notes",

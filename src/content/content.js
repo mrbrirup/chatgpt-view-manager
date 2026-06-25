@@ -1455,33 +1455,18 @@
         createToolbarElement() {
             const toolbarElement = document.createElement("div"),
                 leftToolbarElement = document.createElement("div"),
-                bookmarkButton = this.createIconButton({
-                    iconName: "bookmark",
-                    title: this.getString("bookmarkVisibleBlock"),
-                    onClick: async () => {
-                        await this.addBookmarkForVisibleBlock();
-                    }
-                }),
-                noteVisibleBlockButton = this.createIconButton({
-                    iconName: "note",
-                    title: this.getString("noteVisibleBlock"),
-                    onClick: async () => {
-                        await this.editNotesForVisibleBlock();
-                    }
-                }),
-                rescanButton = this.createIconButton({
-                    iconName: "rescan",
-                    title: this.getString("rescanConversationBlocks"),
-                    onClick: () => {
-                        this.scanner.findBlocks();
-                        this.render();
-                    }
-                }),
                 topButton = this.createIconButton({
                     iconName: "top",
                     title: this.getString("scrollToTop"),
                     onClick: () => {
                         this.scrollChatRootTo(0);
+                    }
+                }),
+                bottomButton = this.createIconButton({
+                    iconName: "bottom",
+                    title: this.getString("scrollToBottom"),
+                    onClick: () => {
+                        this.scrollChatRootToBottom();
                     }
                 }),
                 filterControlElement = this.createFilterControlElement();
@@ -1490,10 +1475,8 @@
             leftToolbarElement.className = "mrbr-cvm-toolbar-left";
 
             leftToolbarElement.append(
-                bookmarkButton,
-                noteVisibleBlockButton,
-                rescanButton,
-                topButton
+                topButton,
+                bottomButton
             );
 
             this.actionsDropdown = new ViewManagerActionsDropdown({
@@ -1778,21 +1761,6 @@
             return rowElement;
         }
 
-        /**
-        * Adds a bookmark for the currently visible conversation block.
-        *
-        * @returns {Promise<void>}
-        */
-        async addBookmarkForVisibleBlock() {
-            const block = this.findBestVisibleBlock();
-
-            if (!block) {
-                alert(this.getString("noVisibleConversationBlockFound"));
-                return;
-            }
-
-            await this.addBookmarkForBlockElement(block);
-        }
         /**
          * Scrolls to a bookmark's block.
          *
@@ -2163,6 +2131,22 @@
                 top,
                 behavior
             });
+        }
+
+        /**
+         * Scrolls to the current bottom of the ChatGPT conversation.
+         *
+         * @param {ScrollBehavior} [behavior]
+         * @returns {void}
+         */
+        scrollChatRootToBottom(behavior = "smooth") {
+            const scrollRoot = this.getScrollRoot();
+
+            if (!scrollRoot) {
+                return;
+            }
+
+            this.scrollChatRootTo(scrollRoot.scrollHeight, behavior);
         }
         /**
          * Scrolls a turn container into view inside the ChatGPT scroll root.
@@ -2605,19 +2589,6 @@
             }
 
             return button;
-        }
-
-        /**
-         * Opens notes for the best visible block. If it is not already a bookmark or
-         * collapsed block, saving a note creates a bookmark with that note.
-         *
-         * @returns {Promise<void>}
-         */
-        async editNotesForVisibleBlock() {
-            await this.notesManager.editNotesForBlockElement(this.findBestVisibleBlock());
-            this.syncStateReferences();
-            this.applyCollapsedBlocks();
-            this.render();
         }
 
         /**
