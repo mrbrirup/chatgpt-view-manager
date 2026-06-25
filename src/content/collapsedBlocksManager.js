@@ -380,7 +380,9 @@
                 notes: this.notesManager?.getCollapsedBlockNotes?.(collapsedBlock)
                     || this.notesManager?.getBlockNotes?.(collapsedBlock?.blockKey)
                     || collapsedBlock?.notes
-                    || ""
+                    || "",
+                blockKey: collapsedBlock?.blockKey || "",
+                turnId: collapsedBlock?.turnId || collapsedBlock?.turnIdContainer || ""
             });
         }
 

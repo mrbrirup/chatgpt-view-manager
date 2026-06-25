@@ -19,7 +19,7 @@
          *     strings?: { get: (key: string) => string, format?: (key: string, ...values: Array<string | number>) => string },
          *     scheduleDomUpdate?: (callback: () => void) => void,
          *     render?: () => void,
-         *     highlightBlock?: (block: HTMLElement) => void,
+         *     highlightBlock?: (block: HTMLElement) => HTMLElement | void,
          *     clearHighlight?: (block: HTMLElement) => void
          * }} options
          */
@@ -218,7 +218,7 @@
 
         /**
          * @param {{ dialogTitle: string, label?: string, notes?: string, requireText?: boolean }} options
-         * @returns {Promise<{ notes: string } | null>}
+         * @returns {Promise<{ notes: string, deleteNote?: boolean } | null>}
          */
         showNotesDialog(options) {
             return new Promise(resolve => {
@@ -228,6 +228,8 @@
                     notesLabelElement = document.createElement("label"),
                     notesTextAreaElement = document.createElement("textarea"),
                     actionsElement = document.createElement("div"),
+                    deleteButton = document.createElement("button"),
+                    actionsSpacerElement = document.createElement("span"),
                     cancelButton = document.createElement("button"),
                     saveButton = document.createElement("button"),
                     dialogId = `mrbr-cvm-notes-dialog-${crypto.randomUUID()}`,
@@ -236,7 +238,7 @@
                 let isResolved = false;
 
                 /**
-                 * @param {{ notes: string } | null} value
+                 * @param {{ notes: string, deleteNote?: boolean } | null} value
                  * @returns {void}
                  */
                 const closeDialog = value => {
@@ -259,6 +261,17 @@
                     }
 
                     closeDialog({ notes });
+                };
+
+                const deleteNote = () => {
+                    if (!window.confirm(this.getString("deleteNoteConfirm"))) {
+                        return;
+                    }
+
+                    closeDialog({
+                        notes: "",
+                        deleteNote: true
+                    });
                 };
 
                 /**
@@ -299,7 +312,16 @@
                 notesTextAreaElement.value = this.sanitizeNoteText(options.notes || "");
                 notesTextAreaElement.placeholder = this.getString("notesEmptyPlaceholder");
 
-                actionsElement.className = "mrbr-cvm-dialog-actions";
+                actionsElement.className = "mrbr-cvm-dialog-actions mrbr-cvm-notes-dialog-actions";
+
+                deleteButton.type = "button";
+                deleteButton.className = "mrbr-cvm-notes-delete-button";
+                deleteButton.textContent = this.getString("deleteNote");
+                deleteButton.disabled = !this.sanitizeNoteText(options.notes || "");
+                deleteButton.addEventListener("click", deleteNote);
+
+                actionsSpacerElement.className = "mrbr-cvm-notes-dialog-actions-spacer";
+                actionsSpacerElement.setAttribute("aria-hidden", "true");
 
                 cancelButton.type = "button";
                 cancelButton.textContent = this.getString("cancel");
@@ -317,7 +339,12 @@
 
                 document.addEventListener("keydown", handleDocumentKeyDown, true);
 
-                actionsElement.append(cancelButton, saveButton);
+                actionsElement.append(
+                    deleteButton,
+                    actionsSpacerElement,
+                    cancelButton,
+                    saveButton
+                );
                 dialogElement.append(headingElement, notesLabelElement, notesTextAreaElement, actionsElement);
                 backdropElement.append(dialogElement);
 
@@ -362,8 +389,8 @@
                 return false;
             }
 
-            this.setBookmarkNotes(bookmark, result.notes);
-            await this.saveAndRender(!(hadNotes && !result.notes));
+            this.setBookmarkNotes(bookmark, result.deleteNote ? "" : result.notes);
+            await this.saveAndRender(!(hadNotes && (result.deleteNote || !result.notes)));
 
             return true;
         }
@@ -384,8 +411,8 @@
                 return false;
             }
 
-            this.setCollapsedBlockNotes(collapsedBlock, result.notes);
-            await this.saveAndRender(!(hadNotes && !result.notes));
+            this.setCollapsedBlockNotes(collapsedBlock, result.deleteNote ? "" : result.notes);
+            await this.saveAndRender(!(hadNotes && (result.deleteNote || !result.notes)));
 
             return true;
         }
@@ -501,7 +528,7 @@
                 return false;
             }
 
-            this.highlightBlock(block);
+            const highlightedElement = this.highlightBlock(block) || block;
 
             try {
                 const identity = this.getIdentityForBlock(block),
@@ -528,7 +555,7 @@
                     return false;
                 }
 
-                if (!result.notes) {
+                if (result.deleteNote || !result.notes) {
                     this.setBlockNotes(identity.blockKey, "");
                     await this.saveAndRender(false);
                     return true;
@@ -539,7 +566,7 @@
 
                 return true;
             } finally {
-                this.clearHighlight(block);
+                this.clearHighlight(highlightedElement);
             }
         }
 

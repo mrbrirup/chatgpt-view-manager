@@ -159,6 +159,8 @@
             editBookmarkNotesTitle: "Bookmark notes",
             editNotes: "Edit notes",
             saveNotes: "Save notes",
+            deleteNote: "Delete Note",
+            deleteNoteConfirm: "Delete this note? This cannot be undone.",
             notesLabel: "Notes",
             noteCreatedBookmarkTitle: "Note",
             noteCreatedBookmarkTitlePrefix: "Note: {0}",

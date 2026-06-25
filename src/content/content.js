@@ -260,8 +260,8 @@
                     this.applyCollapsedBlocks();
                     this.render();
                 },
-                highlightBlock: block => this.highlightPendingBookmark(block),
-                clearHighlight: block => block.classList.remove("mrbr-cvm-pending-bookmark")
+                highlightBlock: block => this.highlightNotesTarget(block),
+                clearHighlight: block => this.clearNotesTargetHighlight(block)
             });
             this.importExport = new ViewManagerImportExport({
                 persistence: this.persistence,
@@ -2298,6 +2298,65 @@
 
                 block.classList.add("mrbr-cvm-pending-bookmark");
             });
+        }
+
+        /**
+         * Highlights the visible UI associated with a block while its notes dialog is open.
+         * For collapsed content this is the InformationBar rather than hidden block content.
+         *
+         * @param {HTMLElement} block
+         * @returns {HTMLElement}
+         */
+        highlightNotesTarget(block) {
+            const identity = this.collapsedBlocksManager.getIdentityForElement(block),
+                informationBars = Array.from(document.querySelectorAll(
+                    "[data-mrbr-cvm-information-bar]:not([hidden])"
+                )).filter(element => element instanceof HTMLElement),
+                matchingInformationBar = informationBars.find(element => {
+                    if (!(element instanceof HTMLElement)) {
+                        return false;
+                    }
+
+                    const blockKey = element.dataset.mrbrCvmBlockKey || "",
+                        turnId = element.dataset.mrbrCvmTurnId || "";
+
+                    return (identity.blockKey && blockKey === identity.blockKey)
+                        || (identity.turnId && turnId === identity.turnId)
+                        || (identity.turnIdContainer && turnId === identity.turnIdContainer);
+                }),
+                target = matchingInformationBar instanceof HTMLElement
+                    ? matchingInformationBar
+                    : block;
+
+            this.highlightPendingBookmark(target);
+            target.classList.add("mrbr-cvm-notes-highlight-target");
+            target.dataset.mrbrCvmNotesHighlightTarget = "true";
+            target.dataset.mrbrCvmNotesHighlightType = matchingInformationBar
+                ? "information-bar"
+                : "conversation-block-fallback";
+            target.dataset.mrbrCvmNotesHighlightBlockKey = identity.blockKey || "";
+            target.dataset.mrbrCvmNotesHighlightTurnId = identity.turnId
+                || identity.turnIdContainer
+                || "";
+
+            return target;
+        }
+
+        /**
+         * Clears note-dialog highlighting and its diagnostic attributes.
+         *
+         * @param {HTMLElement} target
+         * @returns {void}
+         */
+        clearNotesTargetHighlight(target) {
+            target.classList.remove(
+                "mrbr-cvm-pending-bookmark",
+                "mrbr-cvm-notes-highlight-target"
+            );
+            delete target.dataset.mrbrCvmNotesHighlightTarget;
+            delete target.dataset.mrbrCvmNotesHighlightType;
+            delete target.dataset.mrbrCvmNotesHighlightBlockKey;
+            delete target.dataset.mrbrCvmNotesHighlightTurnId;
         }
 
         /**

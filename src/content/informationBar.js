@@ -63,7 +63,7 @@
 
         /**
          * @param {HTMLElement} host
-         * @param {{ title?: string, notes?: string }} state
+         * @param {{ title?: string, notes?: string, blockKey?: string, turnId?: string }} state
          * @returns {HTMLElement}
          */
         show(host, state) {
@@ -90,6 +90,8 @@
 
             element.hidden = false;
             element.classList.toggle("mrbr-cvm-information-bar-has-note", Boolean(notes));
+            element.dataset.mrbrCvmBlockKey = String(state.blockKey || "");
+            element.dataset.mrbrCvmTurnId = String(state.turnId || "");
 
             return element;
         }
