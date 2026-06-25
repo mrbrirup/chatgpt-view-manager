@@ -523,7 +523,7 @@
 .mrbr-cvm-compact-row {
     display: grid;
     gap: 0px;
-    grid-template-columns: auto auto auto minmax(0, 1fr);
+    grid-template-columns: auto auto auto auto minmax(0, 1fr);
     align-items: center;
     min-height: 28px;
 }
@@ -660,7 +660,7 @@
 }
 
 .mrbr-cvm-compact-row-bookmark {
-    grid-template-columns: auto auto auto minmax(0, 1fr);
+    grid-template-columns: auto auto auto auto minmax(0, 1fr);
 }
 
 .mrbr-cvm-collapsed-placeholder .mrbr-cvm-icon-button {

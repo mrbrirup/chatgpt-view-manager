@@ -29,7 +29,8 @@
       ],
       "css": [
         "src/content/content.css",
-        "src/content/collapsedBlocksManager.css"
+        "src/content/collapsedBlocksManager.css",
+        "src/content/viewManagerNotes.css"
       ],
       "run_at": "document_idle"
     }

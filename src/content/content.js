@@ -245,7 +245,18 @@
                 storageKey: MrbrChatGptViewManager.STORAGE_KEY
             });
             this.notesManager = new ViewManagerNotesManager({
-                getState: () => this.state
+                getState: () => this.state,
+                persistence: this.persistence,
+                scanner: this.scanner,
+                strings: ViewManagerStrings,
+                scheduleDomUpdate: callback => this.scheduleDomUpdate(callback),
+                render: () => {
+                    this.syncStateReferences();
+                    this.applyCollapsedBlocks();
+                    this.render();
+                },
+                highlightBlock: block => this.highlightPendingBookmark(block),
+                clearHighlight: block => block.classList.remove("mrbr-cvm-pending-bookmark")
             });
             this.importExport = new ViewManagerImportExport({
                 persistence: this.persistence,
@@ -272,7 +283,8 @@
                 scrollTurnContainerIntoViewAndVerify: (item, blockPosition, maxRetries) => {
                     return this.scrollTurnContainerIntoViewAndVerify(item, blockPosition, maxRetries);
                 },
-                waitForTurnHydration: milliseconds => this.waitForTurnHydration(milliseconds)
+                waitForTurnHydration: milliseconds => this.waitForTurnHydration(milliseconds),
+                editBlockNotes: request => this.editBlockNotesFromCollapsedToolbar(request)
             });
 
             MrbrChatGptViewManager.collapsedBlocksManager = this.collapsedBlocksManager;
@@ -333,6 +345,14 @@
          * @type {boolean}
          */
         isSynchronizingSharedState = false;
+
+        /**
+         * True after Chrome invalidates this content-script context, usually because
+         * the extension was reloaded while the ChatGPT tab stayed open.
+         *
+         * @type {boolean}
+         */
+        isExtensionContextInvalidated = false;
 
         /**
          * @type {number}
@@ -626,13 +646,76 @@
         }
 
         /**
+         * Checks whether an error was caused by Chrome invalidating this extension
+         * content-script context. This normally happens after reloading or updating
+         * the extension while a ChatGPT tab is still open.
+         *
+         * @param {unknown} error
+         * @returns {boolean}
+         */
+        isExtensionContextInvalidatedError(error) {
+            const message = error instanceof Error
+                ? error.message
+                : String(error || "");
+
+            return message.includes("Extension context invalidated");
+        }
+
+        /**
+         * Marks this content-script instance as stale when Chrome has invalidated
+         * the extension context, and prevents repeated background sync attempts.
+         *
+         * @param {unknown} error
+         * @returns {boolean} True when the error was handled as context invalidation.
+         */
+        handleExtensionContextError(error) {
+            if (!this.isExtensionContextInvalidatedError(error)) {
+                return false;
+            }
+
+            this.isExtensionContextInvalidated = true;
+
+            if (this.sharedStateRefreshTimeoutId) {
+                window.clearTimeout(this.sharedStateRefreshTimeoutId);
+                this.sharedStateRefreshTimeoutId = 0;
+            }
+
+            console.info(
+                "ChatGPT View Manager extension context was invalidated. Reload this ChatGPT tab to attach the current extension instance."
+            );
+
+            return true;
+        }
+
+        /**
+         * Safely checks whether Chrome extension storage APIs are still available.
+         * Access can throw after the extension is reloaded while this tab remains open.
+         *
+         * @returns {boolean}
+         */
+        isChromeExtensionContextAvailable() {
+            if (this.isExtensionContextInvalidated) {
+                return false;
+            }
+
+            try {
+                return typeof chrome !== "undefined"
+                    && Boolean(chrome.runtime?.id)
+                    && Boolean(chrome.storage?.local);
+            } catch (error) {
+                this.handleExtensionContextError(error);
+                return false;
+            }
+        }
+
+        /**
          * Watches for this tab becoming active and for changes saved by other tabs.
          *
          * @returns {void}
          */
         startSharedStateObserver() {
             const scheduleActiveMerge = () => {
-                if (document.visibilityState === "hidden") {
+                if (document.visibilityState === "hidden" || !this.isChromeExtensionContextAvailable()) {
                     return;
                 }
 
@@ -642,17 +725,27 @@
             document.addEventListener("visibilitychange", scheduleActiveMerge);
             window.addEventListener("focus", scheduleActiveMerge);
 
-            chrome.storage?.onChanged?.addListener?.((changes, areaName) => {
-                if (areaName !== "local" || !changes[MrbrChatGptViewManager.STORAGE_KEY]) {
+            try {
+                if (!this.isChromeExtensionContextAvailable()) {
                     return;
                 }
 
-                if (document.visibilityState === "hidden") {
-                    return;
-                }
+                chrome.storage.onChanged.addListener((changes, areaName) => {
+                    if (areaName !== "local" || !changes[MrbrChatGptViewManager.STORAGE_KEY]) {
+                        return;
+                    }
 
-                this.scheduleSharedStateRefresh(false);
-            });
+                    if (document.visibilityState === "hidden" || !this.isChromeExtensionContextAvailable()) {
+                        return;
+                    }
+
+                    this.scheduleSharedStateRefresh(false);
+                });
+            } catch (error) {
+                if (!this.handleExtensionContextError(error)) {
+                    throw error;
+                }
+            }
         }
 
         /**
@@ -662,12 +755,24 @@
          * @returns {void}
          */
         scheduleSharedStateRefresh(persistMerged) {
+            if (!this.isChromeExtensionContextAvailable()) {
+                return;
+            }
+
             window.clearTimeout(this.sharedStateRefreshTimeoutId);
 
             this.sharedStateRefreshTimeoutId = window.setTimeout(() => {
                 this.sharedStateRefreshTimeoutId = 0;
 
+                if (!this.isChromeExtensionContextAvailable()) {
+                    return;
+                }
+
                 this.syncSharedStateFromStorage(persistMerged).catch(error => {
+                    if (this.handleExtensionContextError(error)) {
+                        return;
+                    }
+
                     console.error("ChatGPT View Manager shared state sync failed.", error);
                 });
             }, 100);
@@ -681,7 +786,7 @@
          * @returns {Promise<void>}
          */
         async syncSharedStateFromStorage(persistMerged) {
-            if (!this.persistence || this.isSynchronizingSharedState) {
+            if (!this.persistence || this.isSynchronizingSharedState || !this.isChromeExtensionContextAvailable()) {
                 return;
             }
 
@@ -734,8 +839,18 @@
                 throw new Error("View Manager persistence has not been initialised.");
             }
 
-            await this.persistence.loadState();
-            this.syncStateReferences();
+            if (!this.isChromeExtensionContextAvailable()) {
+                return;
+            }
+
+            try {
+                await this.persistence.loadState();
+                this.syncStateReferences();
+            } catch (error) {
+                if (!this.handleExtensionContextError(error)) {
+                    throw error;
+                }
+            }
         }
         /**
          * Synchronises manager field references after persistence load/save.
@@ -950,8 +1065,18 @@
                 throw new Error("View Manager persistence has not been initialised.");
             }
 
-            await this.persistence.saveState(this.state, options);
-            this.syncStateReferences();
+            if (!this.isChromeExtensionContextAvailable()) {
+                return;
+            }
+
+            try {
+                await this.persistence.saveState(this.state, options);
+                this.syncStateReferences();
+            } catch (error) {
+                if (!this.handleExtensionContextError(error)) {
+                    throw error;
+                }
+            }
         }
         /**
          * Gets tooltip text for a block-level note.
@@ -1125,6 +1250,13 @@
                         await this.restoreCollapsedBlock(collapsedBlock);
                     }
                 }),
+                noteButton = this.createNoteIconButton({
+                    title: this.getBlockNotesTooltip(collapsedBlock.blockKey),
+                    hasNote: this.notesManager.hasCollapsedBlockNotes(collapsedBlock),
+                    onClick: async () => {
+                        await this.editCollapsedBlockNotes(collapsedBlock);
+                    }
+                }),
                 deleteButton = this.createIconButton({
                     iconName: "delete",
                     title: this.getString("forgetCollapsedBlockAndRestore"),
@@ -1143,7 +1275,7 @@
                 }),
                 labelElement = document.createElement("div"),
                 key = collapsedBlock.blockKey || `${collapsedBlock.role || "unknown"}-${collapsedBlock.blockIndex || "?"}`;
-            const blockNotes = this.getBlockNotes(collapsedBlock.blockKey);
+            const blockNotes = this.notesManager.getCollapsedBlockNotes(collapsedBlock);
 
             rowElement.className = "mrbr-cvm-compact-row";
 
@@ -1154,7 +1286,7 @@
                 ? `${title}\n\n${blockNotes}\n\n${key}`
                 : `${title}\n${key}`;
 
-            rowElement.append(goButton, restoreButton, deleteButton, labelElement);
+            rowElement.append(goButton, restoreButton, noteButton, deleteButton, labelElement);
 
             return rowElement;
         }
@@ -1183,6 +1315,13 @@
                         await this.addBookmarkForVisibleBlock();
                     }
                 }),
+                noteVisibleBlockButton = this.createIconButton({
+                    iconName: "note",
+                    title: this.getString("noteVisibleBlock"),
+                    onClick: async () => {
+                        await this.editNotesForVisibleBlock();
+                    }
+                }),
                 rescanButton = this.createIconButton({
                     iconName: "rescan",
                     title: this.getString("rescanConversationBlocks"),
@@ -1205,6 +1344,7 @@
 
             leftToolbarElement.append(
                 bookmarkButton,
+                noteVisibleBlockButton,
                 rescanButton,
                 topButton
             );
@@ -1455,6 +1595,15 @@
                         await this.editBookmark(bookmark);
                     }
                 }),
+                noteButton = this.createNoteIconButton({
+                    title: this.notesManager.hasBookmarkNotes(bookmark)
+                        ? `${this.getString("hasNotes")}: ${this.notesManager.getBookmarkNotes(bookmark)}`
+                        : this.getString("noNotes"),
+                    hasNote: this.notesManager.hasBookmarkNotes(bookmark),
+                    onClick: async () => {
+                        await this.editBookmarkNotes(bookmark);
+                    }
+                }),
                 deleteButton = this.createIconButton({
                     iconName: "delete",
                     title: this.getString("deleteBookmark"),
@@ -1477,7 +1626,7 @@
                 ? `${title}\n\n${bookmark.notes}\n\n${key}`
                 : `${title}\n${key}`;
 
-            rowElement.append(goButton, editButton, deleteButton, labelElement);
+            rowElement.append(goButton, editButton, noteButton, deleteButton, labelElement);
 
             return rowElement;
         }
@@ -2369,6 +2518,69 @@
         createIconButton(options) {
             return this.iconButtonFactory.createIconButton(options);
         }
+
+        /**
+         * Creates a note icon button and applies the active-note CSS classes when needed.
+         *
+         * @param {{ title: string, hasNote: boolean, onClick: (event: MouseEvent) => void | Promise<void> }} options
+         * @returns {HTMLButtonElement}
+         */
+        createNoteIconButton(options) {
+            const button = this.createIconButton({
+                iconName: "note",
+                title: options.title,
+                onClick: options.onClick
+            });
+
+            button.classList.add("mrbr-cvm-note-button");
+
+            if (options.hasNote) {
+                button.classList.add("mrbr-cvm-note-button-active", "mrbr-cvm-has-note");
+                button.setAttribute("aria-pressed", "true");
+            } else {
+                button.setAttribute("aria-pressed", "false");
+            }
+
+            return button;
+        }
+
+        /**
+         * Opens notes for the best visible block. If it is not already a bookmark or
+         * collapsed block, saving a note creates a bookmark with that note.
+         *
+         * @returns {Promise<void>}
+         */
+        async editNotesForVisibleBlock() {
+            await this.notesManager.editNotesForBlockElement(this.findBestVisibleBlock());
+            this.syncStateReferences();
+            this.applyCollapsedBlocks();
+            this.render();
+        }
+
+        /**
+         * Handles note requests raised by the collapsed-block toolbar.
+         *
+         * @param {{ element?: HTMLElement | null, identity?: any, collapsedBlock?: any }} request
+         * @returns {Promise<void>}
+         */
+        async editBlockNotesFromCollapsedToolbar(request) {
+            await this.notesManager.editNotesForBlockRequest(request);
+            this.syncStateReferences();
+            this.applyCollapsedBlocks();
+            this.render();
+        }
+
+        /**
+         * Opens the note-only editor for a bookmark.
+         *
+         * @param {MrbrCvmBookmark} bookmark
+         * @returns {Promise<void>}
+         */
+        async editBookmarkNotes(bookmark) {
+            await this.notesManager.editBookmarkNotes(bookmark);
+            this.syncStateReferences();
+            this.render();
+        }
         /**
          * Creates a compact collapsible panel section with a title, count, and content.
          *
@@ -2662,9 +2874,8 @@
                 return;
             }
 
-            existingBookmark.title = result.title;
-            existingBookmark.notes = result.notes;
-            existingBookmark.updatedUtc = new Date().toISOString();
+            existingBookmark.title = this.notesManager.sanitizeTitleText(result.title);
+            this.notesManager.setBookmarkNotes(existingBookmark, result.notes);
 
             await this.saveState();
             this.render();
@@ -2676,34 +2887,8 @@
          * @returns {Promise<void>}
          */
         async editCollapsedBlockNotes(collapsedBlock) {
-            if (!collapsedBlock.blockKey) {
-                return;
-            }
-
-            const result = await this.showTitleNotesEditorDialog({
-                dialogTitle: this.getString("collapsedBlockNotesTitle"),
-                titleLabel: this.getString("bookmarkLabel"),
-                notesLabel: this.getString("bookmarkNotes"),
-                title: this.getCollapsedBlockTitle(collapsedBlock),
-                notes: this.getBlockNotes(collapsedBlock.blockKey)
-            });
-
-            if (!result || !result.title) {
-                return;
-            }
-
-            const existingCollapsedBlock = this.state.collapsedBlocks.find(item => {
-                return item.blockKey === collapsedBlock.blockKey;
-            });
-
-            if (existingCollapsedBlock) {
-                existingCollapsedBlock.title = result.title;
-                existingCollapsedBlock.updatedUtc = new Date().toISOString();
-            }
-
-            this.setBlockNotes(collapsedBlock.blockKey, result.notes);
-
-            await this.saveState();
+            await this.notesManager.editCollapsedBlockNotes(collapsedBlock);
+            this.syncStateReferences();
             this.render();
             this.applyCollapsedBlocks();
         }

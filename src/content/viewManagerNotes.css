@@ -1,0 +1,26 @@
+.mrbr-cvm-note-button {
+    position: relative;
+}
+
+.mrbr-cvm-note-button-active,
+.mrbr-cvm-has-note {
+    font-weight: 700;
+}
+
+.mrbr-cvm-note-button-active::after,
+.mrbr-cvm-has-note::after {
+    content: "";
+    position: absolute;
+    right: 2px;
+    top: 2px;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 999px;
+    background: currentColor;
+}
+
+.mrbr-cvm-notes-dialog .mrbr-cvm-notes-textarea {
+    min-height: 10rem;
+    resize: vertical;
+    white-space: pre-wrap;
+}

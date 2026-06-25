@@ -143,6 +143,16 @@
             filterItemsPlaceholder: "Filter",
             clearFilter: "Clear filter",
 
+            noteVisibleBlock: "Add/edit note for visible block",
+            editBookmarkNotes: "Edit bookmark notes",
+            editBookmarkNotesTitle: "Bookmark notes",
+            editNotes: "Edit notes",
+            saveNotes: "Save notes",
+            notesLabel: "Notes",
+            noteCreatedBookmarkTitle: "Note",
+            noteCreatedBookmarkTitlePrefix: "Note: {0}",
+            noteNeedsText: "Add some note text before saving.",
+
             noMatchingBookmarks: "No matching bookmarks.",
             noMatchingCollapsedBlocks: "No matching collapsed blocks.",
 

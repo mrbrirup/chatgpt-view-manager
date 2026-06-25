@@ -48,6 +48,7 @@
             this.getScrollRootCallback = options.getScrollRoot || null;
             this.scrollTurnContainerIntoViewAndVerify = options.scrollTurnContainerIntoViewAndVerify || null;
             this.waitForTurnHydration = options.waitForTurnHydration || null;
+            this.editBlockNotes = options.editBlockNotes || null;
 
             /** @type {HTMLElement | null} */
             this.blockHostElement = null;
@@ -175,20 +176,6 @@
             return this.hoverButtonElement;
         }
 
-                                /**
-                 * Todo: Align the hover button and improve responsiveness to scrolling and resizing.
-                 * Group: UI
-                 * Label: bug
-                 * Description: Hover button is not aligned with the left edge of the conversation area and does not respond well to scrolling or resizing.
-                 * File: src/content/collapsedBlocksManager.js
-                 * Line: 178
-                 * Id: {5c5ed3ce-85bf-4df3-901e-286d9ceb4db9}
-                 * Date: 2026-06-22
-                 * Time: 18:17:37
-                 * Status: Open
-                 * Completed: 
-                 * GitUrl: https://github.com/mrbrirup/chatgpt-view-manager/issues/24
-                 */
         /**
          * @returns {HTMLButtonElement | null}
          */
@@ -693,12 +680,41 @@
                 input.value = this.getCollapsedBlockTitle(collapsedBlock);
             }
 
+            this.updateCollapsedToolbarNoteState(toolbar, collapsedBlock);
+
             delete toolbar.dataset.mrbrCvmToolbarCollapsedBlockHidden;
             toolbar.removeAttribute("data-mrbr-cvm-toolbar-collapsed-block-hidden");
 
             if (toolbar.parentElement !== host) {
                 host.appendChild(toolbar);
             }
+        }
+
+        /**
+         * Updates the collapsed-block toolbar note icon to indicate whether notes exist.
+         *
+         * @param {HTMLElement} toolbar
+         * @param {any} collapsedBlock
+         * @returns {void}
+         */
+        updateCollapsedToolbarNoteState(toolbar, collapsedBlock) {
+            const noteButton = toolbar.querySelector('[data-mrbr-cvm-collapsed-action="note"]'),
+                blockNotes = this.notesManager?.getCollapsedBlockNotes?.(collapsedBlock)
+                    || this.notesManager?.getBlockNotes?.(collapsedBlock?.blockKey)
+                    || collapsedBlock?.notes
+                    || "",
+                hasNotes = blockNotes.length > 0;
+
+            if (!(noteButton instanceof HTMLElement)) {
+                return;
+            }
+
+            noteButton.classList.toggle("mrbr-cvm-note-button-active", hasNotes);
+            noteButton.classList.toggle("mrbr-cvm-has-note", hasNotes);
+            noteButton.setAttribute("aria-pressed", hasNotes ? "true" : "false");
+            noteButton.setAttribute("title", hasNotes
+                ? `${this.getString("hasNotes")}: ${blockNotes}`
+                : this.getString("noNotes"));
         }
 
         /**
@@ -764,15 +780,18 @@
                     title: "Note",
                     iconName: "note",
                     onClick: event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+
                         const host = CollapsedBlocksManager.getClosestTurnContainerIdFromElement(event.target instanceof HTMLElement ? event.target : null),
                             identity = host ? this.getIdentityForElement(host) : null,
                             collapsedBlockState = identity ? this.findCollapsedBlockByIdentity(identity) : null;
 
-                        host?.dispatchEvent(new CustomEvent("mrbr-cvm-collapsed-block-note-requested", {
-                            detail: { collapsedBlock: collapsedBlockState },
-                            bubbles: true,
-                            cancelable: true
-                        }));
+                        this.editBlockNotes?.({
+                            element: host,
+                            identity,
+                            collapsedBlock: collapsedBlockState
+                        });
                     }
                 });
 
@@ -783,6 +802,7 @@
 
             if (noteButton) {
                 noteButton.setAttribute("data-mrbr-cvm-collapsed-action", "note");
+                noteButton.classList.add("mrbr-cvm-note-button");
                 toolbar.appendChild(noteButton);
             }
 
