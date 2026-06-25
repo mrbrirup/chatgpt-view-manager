@@ -64,6 +64,8 @@
             restoreAllCollapsedBlocks: "Restore all collapsed blocks",
             scrollToTop: "Scroll to top",
             scrollToBottom: "Scroll to bottom",
+            collapseAllBlocks: "Collapse all conversation blocks",
+            expandAllBlocks: "Expand all conversation blocks",
             moreViewManagerActions: "More View Manager actions",
 
             expandViewManager: "Expand View Manager",

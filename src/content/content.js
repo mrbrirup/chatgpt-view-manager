@@ -367,6 +367,27 @@
         isSynchronizingSharedState = false;
 
         /**
+         * True while Collapse All or Expand All is processing its cached block snapshot.
+         *
+         * @type {boolean}
+         */
+        isBatchUpdatingBlocks = false;
+
+        /**
+         * Cached number of blocks in the current batch operation.
+         *
+         * @type {number}
+         */
+        batchUpdateBlockCount = 0;
+
+        /**
+         * True when DOM mutations occurred during a batch and need one final refresh.
+         *
+         * @type {boolean}
+         */
+        hasPendingMutationRefreshAfterBatch = false;
+
+        /**
          * True after Chrome invalidates this content-script context, usually because
          * the extension was reloaded while the ChatGPT tab stayed open.
          *
@@ -1277,6 +1298,10 @@
          * @returns {Promise<void>}
          */
         async restoreCollapsedBlockForElement(element) {
+            if (this.isBatchUpdatingBlocks) {
+                return;
+            }
+
             await this.collapsedBlocksManager.restoreCollapsedBlockForElement(element);
             this.syncStateReferences();
             this.render();
@@ -1469,6 +1494,20 @@
                         this.scrollChatRootToBottom();
                     }
                 }),
+                collapseAllButton = this.createIconButton({
+                    iconName: "collapseAll",
+                    title: this.getString("collapseAllBlocks"),
+                    onClick: async () => {
+                        await this.collapseAllBlocks();
+                    }
+                }),
+                expandAllButton = this.createIconButton({
+                    iconName: "expandAll",
+                    title: this.getString("expandAllBlocks"),
+                    onClick: async () => {
+                        await this.expandAllBlocks();
+                    }
+                }),
                 filterControlElement = this.createFilterControlElement();
 
             toolbarElement.className = "mrbr-cvm-toolbar";
@@ -1476,7 +1515,9 @@
 
             leftToolbarElement.append(
                 topButton,
-                bottomButton
+                bottomButton,
+                collapseAllButton,
+                expandAllButton
             );
 
             this.actionsDropdown = new ViewManagerActionsDropdown({
@@ -1505,8 +1546,120 @@
                 filterControlElement,
                 this.actionsDropdown.createElement()
             );
+            this.applyToolbarBusyState(toolbarElement);
 
             return toolbarElement;
+        }
+
+        /**
+         * Applies the current batch busy state to all toolbar controls.
+         *
+         * @param {HTMLElement} toolbarElement
+         * @returns {void}
+         */
+        applyToolbarBusyState(toolbarElement) {
+            toolbarElement.classList.toggle(
+                "mrbr-cvm-toolbar-busy",
+                this.isBatchUpdatingBlocks
+            );
+            toolbarElement.setAttribute(
+                "aria-busy",
+                this.isBatchUpdatingBlocks ? "true" : "false"
+            );
+            toolbarElement.dataset.mrbrCvmBatchBlockCount = String(this.batchUpdateBlockCount);
+
+            toolbarElement.querySelectorAll("button, input, select, textarea").forEach(control => {
+                if (
+                    control instanceof HTMLButtonElement
+                    || control instanceof HTMLInputElement
+                    || control instanceof HTMLSelectElement
+                    || control instanceof HTMLTextAreaElement
+                ) {
+                    if (this.isBatchUpdatingBlocks) {
+                        if (!control.dataset.mrbrCvmDisabledBeforeBatch) {
+                            control.dataset.mrbrCvmDisabledBeforeBatch = control.disabled
+                                ? "true"
+                                : "false";
+                        }
+
+                        control.disabled = true;
+                        return;
+                    }
+
+                    if (control.dataset.mrbrCvmDisabledBeforeBatch) {
+                        control.disabled = control.dataset.mrbrCvmDisabledBeforeBatch === "true";
+                        delete control.dataset.mrbrCvmDisabledBeforeBatch;
+                    }
+                }
+            });
+        }
+
+        /**
+         * Updates the currently rendered toolbar without rebuilding the panel.
+         *
+         * @returns {void}
+         */
+        updateToolbarBusyState() {
+            const toolbarElement = this.panelElement?.querySelector(".mrbr-cvm-toolbar");
+
+            if (toolbarElement instanceof HTMLElement) {
+                this.applyToolbarBusyState(toolbarElement);
+            }
+        }
+
+        /**
+         * Collapses every block in a cached scanner snapshot.
+         *
+         * @returns {Promise<void>}
+         */
+        async collapseAllBlocks() {
+            await this.runBlockBatchOperation(blocks => {
+                return this.collapsedBlocksManager.collapseAllBlocks(blocks);
+            });
+        }
+
+        /**
+         * Expands every block in a cached scanner snapshot.
+         *
+         * @returns {Promise<void>}
+         */
+        async expandAllBlocks() {
+            await this.runBlockBatchOperation(blocks => {
+                return this.collapsedBlocksManager.expandAllBlocks(blocks);
+            });
+        }
+
+        /**
+         * Runs an exclusive block operation against one cached block snapshot.
+         *
+         * @param {(blocks: HTMLElement[]) => Promise<any>} operation
+         * @returns {Promise<void>}
+         */
+        async runBlockBatchOperation(operation) {
+            if (this.isBatchUpdatingBlocks) {
+                return;
+            }
+
+            const blocks = this.scanner.findBlocks();
+
+            this.isBatchUpdatingBlocks = true;
+            this.batchUpdateBlockCount = blocks.length;
+            this.updateToolbarBusyState();
+
+            try {
+                await operation(blocks);
+                this.syncStateReferences();
+            } finally {
+                this.isBatchUpdatingBlocks = false;
+                this.batchUpdateBlockCount = 0;
+                this.updateToolbarBusyState();
+                this.render();
+
+                if (this.hasPendingMutationRefreshAfterBatch) {
+                    this.hasPendingMutationRefreshAfterBatch = false;
+                    this.scheduleMutationRefresh();
+                }
+            }
         }
         /**
          * Restores all collapsed blocks.
@@ -2350,6 +2503,10 @@
         * @returns {Promise<void>}
         */
         async collapseBlock(block) {
+            if (this.isBatchUpdatingBlocks) {
+                return;
+            }
+
             await this.collapsedBlocksManager.collapseBlock(block);
             this.syncStateReferences();
             this.render();
@@ -2371,6 +2528,10 @@
          * @returns {Promise<void>}
          */
         async restoreCollapsedBlock(collapsedBlock) {
+            if (this.isBatchUpdatingBlocks) {
+                return;
+            }
+
             await this.collapsedBlocksManager.restoreCollapsedBlock(collapsedBlock);
             this.syncStateReferences();
             this.render();
@@ -2412,6 +2573,11 @@
          * @returns {void}
          */
         scheduleMutationRefresh() {
+            if (this.isBatchUpdatingBlocks) {
+                this.hasPendingMutationRefreshAfterBatch = true;
+                return;
+            }
+
             window.clearTimeout(this.mutationRefreshTimeoutId);
 
             this.mutationRefreshTimeoutId = window.setTimeout(() => {

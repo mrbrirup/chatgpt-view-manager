@@ -30,6 +30,12 @@
                 case "bottom":
                     return "M12 20l-7-7h5V4h4v9h5l-7 7z";
 
+                case "collapseAll":
+                    return "M5 6h14v2H5V6zm2 4h10v2H7v-2zm2 4h6v2H9v-2zm2 4h2v2h-2v-2z";
+
+                case "expandAll":
+                    return "M11 4h2v2h-2V4zM9 8h6v2H9V8zm-2 4h10v2H7v-2zm-2 4h14v2H5v-2z";
+
                 case "go":
                     return "M5 5h8v2H8.4l6.6 6.6-1.4 1.4L7 8.4V13H5V5zm12 2h2v12H7v-2h10V7z";
 

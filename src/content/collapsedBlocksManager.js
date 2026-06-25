@@ -29,7 +29,8 @@
          *     getScrollRoot?: () => HTMLElement | null,
          *     scrollTurnContainerIntoViewAndVerify?: (item: any, blockPosition?: ScrollLogicalPosition, maxRetries?: number) => Promise<boolean>,
          *     waitForTurnHydration?: (milliseconds?: number) => Promise<void>,
-         *     informationBar?: any
+         *     informationBar?: any,
+         *     batchProcessor?: any
          * }} [options]
          */
         constructor(options = {}) {
@@ -43,9 +44,12 @@
             this.scrollTurnContainerIntoViewAndVerify = options.scrollTurnContainerIntoViewAndVerify || null;
             this.waitForTurnHydration = options.waitForTurnHydration || null;
             const InformationBar = window.MrbrCvm.InformationBar;
+            const AnimationFrameBatchProcessor = window.MrbrCvm.AnimationFrameBatchProcessor;
 
             this.informationBar = options.informationBar
                 || (InformationBar ? new InformationBar({ strings: this.strings }) : null);
+            this.batchProcessor = options.batchProcessor
+                || (AnimationFrameBatchProcessor ? new AnimationFrameBatchProcessor() : null);
 
             /** @type {HTMLElement | null} */
             this.blockHostElement = null;
@@ -278,14 +282,36 @@
                 return null;
             }
 
-            const host = this.getCollapseHostElement(element),
-                identity = this.getIdentityForElement(element),
+            const collapsedBlock = this.createOrUpdateCollapsedBlock(element, title);
+
+            if (!collapsedBlock) {
+                alert(this.getString("selectedBlockInvalidKey"));
+                return null;
+            }
+
+            await this.persistence.saveState();
+
+            this.scheduleDomUpdate(() => {
+                this.applyCollapsedBlockToElement(this.getCollapseHostElement(element), collapsedBlock);
+            });
+
+            return collapsedBlock;
+        }
+
+        /**
+         * Creates or refreshes collapsed state without saving or scheduling DOM work.
+         *
+         * @param {HTMLElement} element
+         * @param {string} [title]
+         * @returns {any | null}
+         */
+        createOrUpdateCollapsedBlock(element, title) {
+            const identity = this.getIdentityForElement(element),
                 blockTitle = title || this.getDefaultTitleForBlock(element),
                 ViewManagerCollapsedBlock = window.MrbrCvm.ViewManagerCollapsedBlock,
                 notes = this.notesManager?.getBlockNotes?.(identity.blockKey) || "";
 
             if (!identity.blockKey && !identity.turnId) {
-                alert(this.getString("selectedBlockInvalidKey"));
                 return null;
             }
 
@@ -307,13 +333,63 @@
                 collapsedBlock.updatedUtc = new Date().toISOString();
             }
 
-            await this.persistence.saveState();
+            return collapsedBlock;
+        }
 
-            this.scheduleDomUpdate(() => {
-                this.applyCollapsedBlockToElement(host, collapsedBlock);
+        /**
+         * Collapses a cached snapshot of conversation blocks over multiple frames.
+         *
+         * @param {HTMLElement[]} blocks
+         * @returns {Promise<{ processedCount: number, totalCount: number }>}
+         */
+        async collapseAllBlocks(blocks) {
+            if (!this.persistence || !this.batchProcessor) {
+                return {
+                    processedCount: 0,
+                    totalCount: blocks.length
+                };
+            }
+
+            const result = await this.batchProcessor.process(blocks, block => {
+                const collapsedBlock = this.createOrUpdateCollapsedBlock(block);
+
+                if (collapsedBlock) {
+                    this.applyCollapsedBlockToElement(
+                        this.getCollapseHostElement(block),
+                        collapsedBlock
+                    );
+                }
             });
 
-            return collapsedBlock;
+            await this.persistence.saveState(this.state);
+
+            return result;
+        }
+
+        /**
+         * Expands a cached snapshot of conversation blocks over multiple frames.
+         *
+         * @param {HTMLElement[]} blocks
+         * @returns {Promise<{ processedCount: number, totalCount: number }>}
+         */
+        async expandAllBlocks(blocks) {
+            if (!this.persistence || !this.batchProcessor) {
+                return {
+                    processedCount: 0,
+                    totalCount: blocks.length
+                };
+            }
+
+            this.state.collapsedBlocks = [];
+
+            const result = await this.batchProcessor.process(blocks, block => {
+                this.restoreCollapsedBlockDomOnlyForElement(block);
+            });
+
+            this.removeOrphanedCollapsedDomState();
+            await this.persistence.saveState(this.state, { mergeFromStorage: false });
+
+            return result;
         }
 
         /**

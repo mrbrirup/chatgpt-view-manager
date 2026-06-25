@@ -37,12 +37,17 @@ The panel includes:
 
 * Detected conversation block count
 * Top and bottom conversation navigation
+* Collapse All and Expand All frame-batched controls
 * Search/filter box
 * Theme/export/import menu
 * Collapsible panel mode
 
 Bookmark, note, collapse, and restore actions are provided by the contextual
 Hover Toolbar on each conversation block.
+
+Collapse All and Expand All cache the current block snapshot and process it over
+time-budgeted animation frames. The panel toolbar remains disabled until the
+batch and its single persistence update complete.
 
 ### Conversation Bookmarks
 

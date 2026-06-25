@@ -493,6 +493,19 @@
     margin-bottom: 8px;
 }
 
+.mrbr-cvm-toolbar-busy {
+    cursor: wait;
+    opacity: 0.72;
+}
+
+.mrbr-cvm-toolbar-busy button:disabled,
+.mrbr-cvm-toolbar-busy input:disabled,
+.mrbr-cvm-toolbar-busy select:disabled,
+.mrbr-cvm-toolbar-busy textarea:disabled {
+    cursor: wait;
+    pointer-events: none;
+}
+
 .mrbr-cvm-theme-toggle-group {
     display: flex;
     flex-wrap: nowrap;
