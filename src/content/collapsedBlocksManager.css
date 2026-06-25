@@ -11,20 +11,13 @@
 }
 
 div[data-mrbr-cvm-collapsing-wrapper] {
-    display: grid;
-    grid-template-rows: 1fr;
-    transition: grid-template-rows 160ms ease-out;
+    display: block;
 }
 
-div[data-mrbr-cvm-collapsing-wrapper] > [data-mrbr-cvm-collapsing-content] {
-    min-height: 0;
-    overflow: hidden;
-}
-
-div[data-mrbr-cvm-collapsing-wrapper].is-shrunk {
-    grid-template-rows: 0fr;
+div[data-mrbr-cvm-collapsing-wrapper].is-shrunk > :not(.mrbr-cvm-information-bar) {
+    display: none !important;
 }
 
 div[data-mrbr-cvm-collapsing-wrapper].is-shrunk > .mrbr-cvm-information-bar {
-    grid-row: 2;
+    display: flex;
 }

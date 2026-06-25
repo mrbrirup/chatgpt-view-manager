@@ -277,6 +277,7 @@
                 persistence: this.persistence,
                 notesManager: this.notesManager,
                 strings: ViewManagerStrings,
+                createIconElement: iconName => this.iconButtonFactory.createIconElement(iconName),
                 scheduleDomUpdate: callback => this.scheduleDomUpdate(callback),
                 flashBlock: block => this.flashBlock(block),
                 getScrollRoot: () => this.getScrollRoot(),
@@ -1361,8 +1362,6 @@
                             self.togglePanelCollapsed();
                         }
                     }),
-                    statusElement = document.createElement("div"),
-                    blocks = self.scanner.findBlocks(),
                     listsContainerElement = document.createElement("div");
 
                 headerElement.className = "mrbr-cvm-header";
@@ -1371,9 +1370,6 @@
                 titleElement.textContent = self.getString("viewManagerTitle");
 
                 headerElement.append(titleElement, collapsePanelButton);
-
-                statusElement.className = "mrbr-cvm-status";
-                statusElement.textContent = self.formatString("blocksDetected", blocks.length);
 
                 listsContainerElement.className = "mrbr-cvm-lists-container";
 
@@ -1384,7 +1380,6 @@
 
                 self.panelElement.replaceChildren(
                     headerElement,
-                    statusElement,
                     self.createToolbarElement(),
                     listsContainerElement
                 );
@@ -1413,6 +1408,12 @@
                     title: this.getString("goToCollapsedBlockPlaceholder"),
                     onClick: async () => {
                         await this.goToCollapsedBlock(collapsedBlock);
+                    },
+                    onMouseEnter: () => {
+                        this.highlightCollapsedBlockGoTarget(collapsedBlock);
+                    },
+                    onMouseLeave: () => {
+                        this.clearCollapsedBlockGoTargetHighlight();
                     }
                 }),
                 restoreButton = this.createIconButton({
@@ -1461,6 +1462,40 @@
             rowElement.append(goButton, restoreButton, noteButton, deleteButton, labelElement);
 
             return rowElement;
+        }
+
+        /**
+         * Highlights the identity-matched Information Bar for a collapsed-list Go action.
+         *
+         * @param {MrbrCvmCollapsedBlock} collapsedBlock
+         * @returns {void}
+         */
+        highlightCollapsedBlockGoTarget(collapsedBlock) {
+            this.clearCollapsedBlockGoTargetHighlight();
+
+            const informationBar = this.collapsedBlocksManager
+                .findInformationBarForCollapsedBlock(collapsedBlock);
+
+            if (!informationBar) {
+                return;
+            }
+
+            informationBar.classList.add("mrbr-cvm-collapsed-go-target");
+            informationBar.dataset.mrbrCvmCollapsedGoTarget = "true";
+        }
+
+        /**
+         * Clears collapsed-list Go hover highlighting.
+         *
+         * @returns {void}
+         */
+        clearCollapsedBlockGoTargetHighlight() {
+            document.querySelectorAll("[data-mrbr-cvm-collapsed-go-target]").forEach(element => {
+                if (element instanceof HTMLElement) {
+                    element.classList.remove("mrbr-cvm-collapsed-go-target");
+                    delete element.dataset.mrbrCvmCollapsedGoTarget;
+                }
+            });
         }
         /**
          * Scrolls to a collapsed block placeholder.
@@ -2587,26 +2622,8 @@
                     const blocks = this.scanner.findBlocks();
 
                     this.applyCollapsedBlocks(blocks);
-                    this.updateBlockCountStatus(blocks.length);
                 });
             }, 150);
-        }
-        /**
-         * Updates the detected block count in the panel.
-         *
-         * @param {number} blockCount
-         * @returns {void}
-         */
-        updateBlockCountStatus(blockCount) {
-            if (!this.panelElement) {
-                return;
-            }
-
-            const statusElement = this.panelElement.querySelector(".mrbr-cvm-status");
-
-            if (statusElement) {
-                statusElement.textContent = this.formatString("blocksDetected", blockCount);
-            }
         }
         /**
         * Shows a non-blocking text input dialog.

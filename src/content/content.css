@@ -159,13 +159,6 @@
     display: none !important;
 }
 
-.mrbr-cvm-status {
-    margin-bottom: 8px;
-    color: var(--mrbr-cvm-panel-muted-foreground);
-    font-size: 12px;
-    display: none;
-}
-
 .mrbr-cvm-bookmark-key {
     color: var(--mrbr-cvm-bookmark-key-foreground);
     font-family: var(--mrbr-cvm-monospace-font-family);

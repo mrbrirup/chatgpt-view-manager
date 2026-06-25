@@ -54,7 +54,6 @@
          */
         static defaultEnglish = {
             viewManagerTitle: "View Manager",
-            blocksDetected: "{0} blocks detected",
 
             addBookmark: "Add bookmark",
             removeBookmark: "Remove bookmark",
@@ -146,6 +145,9 @@
             expandHoverToolbar: "Expand hover toolbar",
             collapsedStatus: "Collapsed",
             noteStatus: "Note",
+            participantUser: "User turn",
+            participantAssistant: "Assistant turn",
+            participantOther: "Other turn",
             collapsedBlockFallback: "Conversation block",
 
             bookmarkFallbackTitle: "Bookmark",

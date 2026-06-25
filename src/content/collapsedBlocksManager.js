@@ -30,7 +30,8 @@
          *     scrollTurnContainerIntoViewAndVerify?: (item: any, blockPosition?: ScrollLogicalPosition, maxRetries?: number) => Promise<boolean>,
          *     waitForTurnHydration?: (milliseconds?: number) => Promise<void>,
          *     informationBar?: any,
-         *     batchProcessor?: any
+         *     batchProcessor?: any,
+         *     createIconElement?: (iconName: string) => SVGSVGElement
          * }} [options]
          */
         constructor(options = {}) {
@@ -47,7 +48,10 @@
             const AnimationFrameBatchProcessor = window.MrbrCvm.AnimationFrameBatchProcessor;
 
             this.informationBar = options.informationBar
-                || (InformationBar ? new InformationBar({ strings: this.strings }) : null);
+                || (InformationBar ? new InformationBar({
+                    strings: this.strings,
+                    createIconElement: options.createIconElement
+                }) : null);
             this.batchProcessor = options.batchProcessor
                 || (AnimationFrameBatchProcessor ? new AnimationFrameBatchProcessor() : null);
 
@@ -351,19 +355,58 @@
             }
 
             const result = await this.batchProcessor.process(blocks, block => {
-                const collapsedBlock = this.createOrUpdateCollapsedBlock(block);
-
-                if (collapsedBlock) {
-                    this.applyCollapsedBlockToElement(
-                        this.getCollapseHostElement(block),
-                        collapsedBlock
-                    );
-                }
+                this.collapseBlockWithoutPersistence(block);
             });
+
+            await this.waitForAnimationFrame();
+
+            const liveBlocksNeedingRetry = this.scanner.findBlocks().filter(block => {
+                const host = this.getCollapseHostElement(block);
+
+                return !host.querySelector(":scope > div.mrbr-cvm-information-bar");
+            });
+
+            if (liveBlocksNeedingRetry.length) {
+                await this.batchProcessor.process(liveBlocksNeedingRetry, block => {
+                    this.collapseBlockWithoutPersistence(block);
+                });
+            }
 
             await this.persistence.saveState(this.state);
 
             return result;
+        }
+
+        /**
+         * Applies the normal collapse state and DOM path without saving.
+         *
+         * @param {HTMLElement} block
+         * @returns {any | null}
+         */
+        collapseBlockWithoutPersistence(block) {
+            const collapsedBlock = this.createOrUpdateCollapsedBlock(block);
+
+            if (!collapsedBlock) {
+                return null;
+            }
+
+            this.applyCollapsedBlockToElement(
+                this.getCollapseHostElement(block),
+                collapsedBlock
+            );
+
+            return collapsedBlock;
+        }
+
+        /**
+         * Waits for one new animation frame before inspecting the live ChatGPT DOM.
+         *
+         * @returns {Promise<void>}
+         */
+        waitForAnimationFrame() {
+            return new Promise(resolve => {
+                window.requestAnimationFrame(() => resolve());
+            });
         }
 
         /**
@@ -428,15 +471,7 @@
          */
         createCollapsingWrapper(host) {
             host.setAttribute("data-mrbr-cvm-collapsing-wrapper", "");
-
-            const content = host.querySelector("section") || host.firstElementChild;
-
-            if (content instanceof HTMLElement) {
-                content.setAttribute("data-mrbr-cvm-collapsing-content", "");
-                return content;
-            }
-
-            return null;
+            return host;
         }
 
         /**
@@ -458,8 +493,29 @@
                     || collapsedBlock?.notes
                     || "",
                 blockKey: collapsedBlock?.blockKey || "",
-                turnId: collapsedBlock?.turnId || collapsedBlock?.turnIdContainer || ""
+                turnId: collapsedBlock?.turnId || collapsedBlock?.turnIdContainer || "",
+                participant: this.getParticipantForHost(host, collapsedBlock)
             });
+        }
+
+        /**
+         * Gets the participant source from ChatGPT's turn section, with saved role fallback.
+         *
+         * @param {HTMLElement} host
+         * @param {any} collapsedBlock
+         * @returns {"user" | "assistant" | "other"}
+         */
+        getParticipantForHost(host, collapsedBlock) {
+            const turnSection = host.matches("section[data-turn]")
+                ? host
+                : host.querySelector("section[data-turn]"),
+                source = turnSection instanceof HTMLElement
+                    ? turnSection.dataset.turn
+                    : collapsedBlock?.role;
+
+            return source === "user" || source === "assistant"
+                ? source
+                : "other";
         }
 
         /**
@@ -539,9 +595,6 @@
             host.removeAttribute(CollapsedBlocksManager.COLLAPSED_HOST_ATTRIBUTE);
             host.removeAttribute("data-mrbr-cvm-collapsed-host-turn-id");
             host.removeAttribute("data-mrbr-cvm-collapsing-wrapper");
-            host.querySelectorAll("[data-mrbr-cvm-collapsing-content]").forEach(content => {
-                content.removeAttribute("data-mrbr-cvm-collapsing-content");
-            });
 
             this.informationBar?.hide?.(host);
         }
@@ -627,6 +680,37 @@
         }
 
         /**
+         * Finds the visible Information Bar for a collapsed block identity.
+         *
+         * @param {any} collapsedBlock
+         * @returns {HTMLElement | null}
+         */
+        findInformationBarForCollapsedBlock(collapsedBlock) {
+            const informationBars = document.querySelectorAll(
+                "[data-mrbr-cvm-information-bar]:not([hidden])"
+            );
+
+            for (const element of informationBars) {
+                if (!(element instanceof HTMLElement)) {
+                    continue;
+                }
+
+                const blockKey = element.dataset.mrbrCvmBlockKey || "",
+                    turnId = element.dataset.mrbrCvmTurnId || "";
+
+                if (
+                    (collapsedBlock.blockKey && blockKey === collapsedBlock.blockKey)
+                    || (collapsedBlock.turnId && turnId === collapsedBlock.turnId)
+                    || (collapsedBlock.turnIdContainer && turnId === collapsedBlock.turnIdContainer)
+                ) {
+                    return element;
+                }
+            }
+
+            return null;
+        }
+
+        /**
          * @param {{ turnId?: string, turnIdContainer?: string, blockKey?: string }} item
          * @returns {HTMLElement | null}
          */
@@ -697,7 +781,9 @@
                 element.scrollIntoView({ behavior: "smooth", block: "start" });
             }
 
-            const refreshedElement = this.findElementForCollapsedBlock(collapsedBlock) || element;
+            const refreshedElement = this.findInformationBarForCollapsedBlock(collapsedBlock)
+                || this.findElementForCollapsedBlock(collapsedBlock)
+                || element;
 
             this.flashBlock(refreshedElement);
 

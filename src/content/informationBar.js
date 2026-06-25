@@ -11,15 +11,20 @@
         static TEMPLATE = `
             <div class="mrbr-cvm-information-bar" data-mrbr-cvm-information-bar hidden>
                 <span class="mrbr-cvm-information-bar-status" data-mrbr-cvm-information-bar-status></span>
+                <span class="mrbr-cvm-information-bar-participant" data-mrbr-cvm-information-bar-participant></span>
                 <span class="mrbr-cvm-information-bar-note" data-mrbr-cvm-information-bar-note hidden></span>
                 <span class="mrbr-cvm-information-bar-title" data-mrbr-cvm-information-bar-title></span>
             </div>`;
 
         /**
-         * @param {{ strings?: { get: (key: string) => string } }} [options]
+         * @param {{
+         *     strings?: { get: (key: string) => string },
+         *     createIconElement?: (iconName: string) => SVGSVGElement
+         * }} [options]
          */
         constructor(options = {}) {
             this.strings = options.strings || window.MrbrCvm.ViewManagerStrings || null;
+            this.createIconElement = options.createIconElement || null;
         }
 
         /**
@@ -63,15 +68,23 @@
 
         /**
          * @param {HTMLElement} host
-         * @param {{ title?: string, notes?: string, blockKey?: string, turnId?: string }} state
+         * @param {{
+         *     title?: string,
+         *     notes?: string,
+         *     blockKey?: string,
+         *     turnId?: string,
+         *     participant?: "user" | "assistant" | "other"
+         * }} state
          * @returns {HTMLElement}
          */
         show(host, state) {
             const element = this.getOrCreate(host),
                 status = element.querySelector("[data-mrbr-cvm-information-bar-status]"),
+                participantElement = element.querySelector("[data-mrbr-cvm-information-bar-participant]"),
                 note = element.querySelector("[data-mrbr-cvm-information-bar-note]"),
                 title = element.querySelector("[data-mrbr-cvm-information-bar-title]"),
-                notes = String(state.notes || "").trim();
+                notes = String(state.notes || "").trim(),
+                participant = this.normalizeParticipant(state.participant);
 
             if (status instanceof HTMLElement) {
                 status.textContent = this.getString("collapsedStatus");
@@ -83,6 +96,33 @@
                 note.title = notes;
             }
 
+            if (participantElement instanceof HTMLElement) {
+                const participantLabel = this.getString(
+                    participant === "user"
+                        ? "participantUser"
+                        : participant === "assistant"
+                            ? "participantAssistant"
+                            : "participantOther"
+                );
+
+                participantElement.replaceChildren();
+                participantElement.title = participantLabel;
+                participantElement.setAttribute("aria-label", participantLabel);
+                participantElement.dataset.mrbrCvmParticipant = participant;
+
+                if (this.createIconElement) {
+                    participantElement.append(this.createIconElement(
+                        participant === "user"
+                            ? "participantUser"
+                            : participant === "assistant"
+                                ? "participantAssistant"
+                                : "participantOther"
+                    ));
+                } else {
+                    participantElement.textContent = participantLabel;
+                }
+            }
+
             if (title instanceof HTMLElement) {
                 title.textContent = String(state.title || this.getString("collapsedBlockFallback"));
                 title.title = title.textContent;
@@ -92,8 +132,19 @@
             element.classList.toggle("mrbr-cvm-information-bar-has-note", Boolean(notes));
             element.dataset.mrbrCvmBlockKey = String(state.blockKey || "");
             element.dataset.mrbrCvmTurnId = String(state.turnId || "");
+            element.dataset.mrbrCvmParticipant = participant;
 
             return element;
+        }
+
+        /**
+         * @param {unknown} value
+         * @returns {"user" | "assistant" | "other"}
+         */
+        normalizeParticipant(value) {
+            return value === "user" || value === "assistant"
+                ? value
+                : "other";
         }
 
         /**

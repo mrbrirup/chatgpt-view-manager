@@ -71,6 +71,15 @@
                 case "note":
                     return "M5 4h14v16H5V4zm2 2v12h10V6H7zm2 2h6v2H9V8zm0 4h6v2H9v-2z";
 
+                case "participantUser":
+                    return "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0v1H5v-1z";
+
+                case "participantAssistant":
+                    return "M7 5h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3zm1 5a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM9 16h6v-2H9v2zM11 2h2v3h-2V2z";
+
+                case "participantOther":
+                    return "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 16a7 7 0 1 1 0-14 7 7 0 0 1 0 14zm-1-4h2v2h-2v-2zm1-9a4 4 0 0 1 2.4 7.2c-.9.7-1.4 1.1-1.4 1.8h-2c0-1.7 1-2.5 2.2-3.4A2 2 0 1 0 10 10H8a4 4 0 0 1 4-4z";
+
                 case "sectionExpanded":
                     return "M7 10l5 5 5-5H7z";
 

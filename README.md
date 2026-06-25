@@ -35,7 +35,6 @@ The extension adds a compact floating panel to ChatGPT pages.
 
 The panel includes:
 
-* Detected conversation block count
 * Top and bottom conversation navigation
 * Collapse All and Expand All frame-batched controls
 * Search/filter box
