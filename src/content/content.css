@@ -25,8 +25,6 @@
     --mrbr-cvm-bookmark-border: #555555;
     --mrbr-cvm-pending-bookmark-outline: #ff3333;
     --mrbr-cvm-pending-bookmark-shadow: rgba(255, 51, 51, 0.25);
-    --mrbr-cvm-collapse-target-outline: #ff3333;
-    --mrbr-cvm-collapse-target-shadow: rgba(255, 51, 51, 0.25);
     --mrbr-cvm-font-family: Arial, sans-serif;
     --mrbr-cvm-monospace-font-family: Consolas, Monaco, monospace;
     --mrbr-cvm-panel-muted-foreground: #bbbbbb;
@@ -40,10 +38,6 @@
     --mrbr-cvm-input-border: #555555;
     --mrbr-cvm-input-focus-outline: #888888;
     --mrbr-cvm-bookmark-key-foreground: #aaaaaa;
-    --mrbr-cvm-collapsed-background: #1a1a1a;
-    --mrbr-cvm-collapsed-border: #666;
-    --mrbr-cvm-collapsed-foreground: #ddd;
-    --mrbr-cvm-collapsed-meta-foreground: #aaaaaa;
     --mrbr-cvm-dialog-backdrop-background: rgba(0, 0, 0, 0.45);
     --mrbr-cvm-dialog-shadow: rgba(0, 0, 0, 0.45);
     --mrbr-cvm-flash-outline: #ff3333;
@@ -77,24 +71,12 @@
     --mrbr-cvm-bookmark-background: #f7f7f7;
     --mrbr-cvm-bookmark-border: #cccccc;
     --mrbr-cvm-bookmark-key-foreground: #666666;
-    --mrbr-cvm-collapsed-background: #f5f5f5;
-    --mrbr-cvm-collapsed-border: #999999;
-    --mrbr-cvm-collapsed-foreground: #222222;
-    --mrbr-cvm-collapsed-meta-foreground: #666666;
     --mrbr-cvm-dialog-backdrop-background: rgba(0, 0, 0, 0.28);
     --mrbr-cvm-dialog-shadow: rgba(0, 0, 0, 0.25);
     --mrbr-cvm-pending-bookmark-outline: #cc0000;
     --mrbr-cvm-pending-bookmark-shadow: rgba(204, 0, 0, 0.20);
-    --mrbr-cvm-collapse-target-outline: #cc0000;
-    --mrbr-cvm-collapse-target-shadow: rgba(204, 0, 0, 0.20);
     --mrbr-cvm-flash-outline: #cc0000;
     --mrbr-cvm-button-foreground: #3f3f3f;
-}
-
-.mrbr-cvm-collapse-target {
-    outline: 3px dashed var(--mrbr-cvm-collapse-target-outline) !important;
-    outline-offset: 6px !important;
-    box-shadow: 0 0 0 6px var(--mrbr-cvm-collapse-target-shadow) !important;
 }
 
 .mrbr-cvm-panel {
@@ -287,70 +269,6 @@
 }
 
 .mrbr-cvm-dialog-actions button:hover {
-    background: var(--mrbr-cvm-button-hover-background);
-}
-
-.mrbr-cvm-collapsed-block {
-    display: none !important;
-}
-
-.mrbr-cvm-collapsed-placeholder {
-    box-sizing: border-box;
-    margin: 8px 0;
-    padding: 6px 8px;
-    border: 1px dashed var(--mrbr-cvm-collapsed-border);
-    border-radius: 6px;
-    background: var(--mrbr-cvm-collapsed-background);
-    color: var(--mrbr-cvm-collapsed-foreground);
-    font-family: var(--mrbr-cvm-font-family);
-    font-size: 13px;
-    border-color: var(--mrbr-cvm-collapsed-border);
-    display: grid;
-    grid-template-columns: auto auto minmax(0, 1fr);
-    align-items: center;
-    gap: 0px;
-}
-
-.mrbr-cvm-collapsed-placeholder>div:first-of-type {
-    margin-left: 4px;
-}
-
-.mrbr-cvm-collapsed-placeholder>button:first-of-type {
-    border-radius: 1px 0 0 1px;
-}
-
-.mrbr-cvm-collapsed-placeholder>button:last-of-type {
-    border-radius: 0 1px 1px 0;
-    border-left: 0;
-}
-
-
-.mrbr-cvm-collapsed-title {
-    margin-bottom: 6px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.mrbr-cvm-collapsed-meta {
-    margin-bottom: 8px;
-    color: var(--mrbr-cvm-collapsed-meta-foreground);
-    font-family: var(--mrbr-cvm-monospace-font-family);
-    font-size: 11px;
-}
-
-.mrbr-cvm-collapsed-placeholder button {
-    cursor: pointer;
-    padding: 5px 8px;
-    border: 1px solid var(--mrbr-cvm-panel-border);
-    border-radius: var(--mrbr-cvm-panel-border-radius);
-    background: var(--mrbr-cvm-button-background);
-    color: var(--mrbr-cvm-button-foreground);
-    font-size: 12px;
-    border-color: var(--mrbr-cvm-button-border);
-}
-
-.mrbr-cvm-collapsed-placeholder button:hover {
     background: var(--mrbr-cvm-button-hover-background);
 }
 
@@ -663,21 +581,6 @@
     grid-template-columns: auto auto auto auto minmax(0, 1fr);
 }
 
-.mrbr-cvm-collapsed-placeholder .mrbr-cvm-icon-button {
-    width: 24px;
-    height: 24px;
-    min-width: 24px;
-    padding: 0px;
-}
-
-.mrbr-cvm-collapsed-placeholder-title {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 12px;
-}
-
 .mrbr-cvm-note-button-active {
     color: var(--mrbr-cvm-pending-bookmark-outline) !important;
     border-color: var(--mrbr-cvm-pending-bookmark-outline) !important;
@@ -700,8 +603,7 @@
     min-width: 0;
 }
 
-.mrbr-cvm-toolbar-left,
-.mrbr-cvm-toolbar-collapsed-block {
+.mrbr-cvm-toolbar-left {
     display: flex;
     align-items: center;
     gap: 0px;
@@ -717,27 +619,6 @@
 }
 
 .mrbr-cvm-toolbar-left>button:last-of-type {
-    border-radius: 0 1px 1px 0;
-    border-left: 0;
-}
-
-.mrbr-cvm-toolbar-collapsed-block>.mrbr-cvm-icon-button {
-    cursor: pointer;
-    box-sizing: border-box;
-    color: var(--mrbr-cvm-button-foreground);
-    font-size: 12px;
-    margin: 2px 0px;
-    padding: var(--mrbr-cvm-panel-padding-button-padding);
-    border-radius: var(--mrbr-cvm-panel-border-radius);
-    background: var(--mrbr-cvm-button-background);
-    border: solid 1px var(--mrbr-cvm-button-border);
-}
-
-.mrbr-cvm-toolbar-collapsed-block>.mrbr-cvm-icon-button:first-of-type {
-    border-radius: 1px 0 0 1px;
-}
-
-.mrbr-cvm-toolbar-collapsed-block>.mrbr-cvm-icon-button:last-of-type {
     border-radius: 0 1px 1px 0;
     border-left: 0;
 }
@@ -818,16 +699,10 @@
         --mrbr-cvm-bookmark-background: #f7f7f7;
         --mrbr-cvm-bookmark-border: #cccccc;
         --mrbr-cvm-bookmark-key-foreground: #666666;
-        --mrbr-cvm-collapsed-background: #f5f5f5;
-        --mrbr-cvm-collapsed-border: #999999;
-        --mrbr-cvm-collapsed-foreground: #222222;
-        --mrbr-cvm-collapsed-meta-foreground: #666666;
         --mrbr-cvm-dialog-backdrop-background: rgba(0, 0, 0, 0.28);
         --mrbr-cvm-dialog-shadow: rgba(0, 0, 0, 0.25);
         --mrbr-cvm-pending-bookmark-outline: #cc0000;
         --mrbr-cvm-pending-bookmark-shadow: rgba(204, 0, 0, 0.20);
-        --mrbr-cvm-collapse-target-outline: #cc0000;
-        --mrbr-cvm-collapse-target-shadow: rgba(204, 0, 0, 0.20);
         --mrbr-cvm-flash-outline: #cc0000;
     }
 }
@@ -839,29 +714,6 @@
 }
 
 
-/* 1. The Default State (Expanded / Natural Content Height) */
-div[data-mrbr-cvm-collapsing-wrapper] {
-    display: grid;
-    grid-template-rows: 1fr;
-    /* 1fr means "take up the full natural height" */
-    transition: grid-template-rows 0.5s ease-out;
-    /* Smoothly animate the change */
-}
-
-/* 2. The Shrunk State */
-div[data-mrbr-cvm-collapsing-wrapper].is-shrunk {
-    grid-template-rows: 0fr;
-    /* 0fr smoothly shrinks the height to zero */
-}
-
-/* 3. Safe Content Handling */
-section[data-mrbr-cvm-collapsing-content] {
-    overflow: hidden;
-    /* Prevents text from spilling out while shrinking */
-    min-height: 0;
-    /* Crucial: allows the grid row to shrink past the text size */
-}
-
 .mrbr-cvm-text-ellipsis {
     text-overflow: ellipsis;
     overflow: hidden;
@@ -872,10 +724,3 @@ section[data-mrbr-cvm-collapsing-content] {
     border-radius: 1px 0 0 1px;
 }
 
-.mrbr-cvm-toolbar>.mrbr-cvm-toolbar-collapsed-block-label {
-    border-radius: 1px;
-    width: 100%;
-    padding: 3px;
-    margin: 0px 4px;
-
-}

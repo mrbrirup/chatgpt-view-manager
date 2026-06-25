@@ -1,0 +1,44 @@
+.mrbr-cvm-information-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    margin: 6px 8px;
+    padding: 5px 8px;
+    border: 1px solid var(--mrbr-cvm-panel-border);
+    border-radius: var(--mrbr-cvm-panel-border-radius);
+    background: var(--mrbr-cvm-button-background);
+    color: var(--mrbr-cvm-button-foreground);
+    font: 12px/1.3 system-ui, sans-serif;
+}
+
+.mrbr-cvm-information-bar[hidden] {
+    display: none !important;
+}
+
+.mrbr-cvm-information-bar-status,
+.mrbr-cvm-information-bar-note {
+    flex: 0 0 auto;
+    font-weight: 700;
+}
+
+.mrbr-cvm-information-bar-status::before {
+    content: "▰";
+    margin-right: 4px;
+}
+
+.mrbr-cvm-information-bar-note::before {
+    content: "●";
+    margin-right: 4px;
+}
+
+.mrbr-cvm-information-bar-note {
+    color: var(--mrbr-cvm-pending-bookmark-outline);
+}
+
+.mrbr-cvm-information-bar-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

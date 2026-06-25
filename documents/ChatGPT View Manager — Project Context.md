@@ -24,6 +24,9 @@ Important preferences:
 
 * Use small, focused classes.
 * Prefer object-oriented design.
+* Treat class-based OOP and encapsulation as the default design style.
+* Keep DOM structure creation inside the UI class that owns it, using `DOMParser`
+  for reusable HTML templates where appropriate.
 * Keep UI code clean and professional.
 * Avoid unnecessary decoration or entertainment-style UI.
 * Use `window.MrbrCvm` as the namespace.
@@ -150,17 +153,39 @@ Notes should be available from:
 
 ### CollapsedBlocksManager
 
-Owns collapsed-block UI and DOM behaviour.
+Owns collapsed-block persistence coordination and DOM behaviour.
 
 Responsibilities:
 
-* Show hover collapse button over the hovered conversation turn/block.
-* Move the hover button as the mouse moves.
-* Collapse the hovered block.
-* Restore collapsed blocks from their toolbar.
-* Create collapsed-block toolbar UI.
-* Mark notes buttons as active when notes exist.
-* Call into persistence/notes callbacks rather than owning global storage directly.
+* Collapse and restore conversation blocks.
+* Apply persisted collapsed state to hydrated conversation blocks.
+* Coordinate the display-only `InformationBar`.
+* Keep block identity and collapsed DOM mechanics separate from hover interaction.
+* Call into persistence rather than owning global storage directly.
+
+### HoverToolbar
+
+Owns the contextual toolbar shown for a hovered conversation block.
+
+Responsibilities:
+
+* Track the currently hovered conversation block.
+* Position and minimise the toolbar.
+* Show collapse or restore according to block state.
+* Show add or remove bookmark according to block state.
+* Show add/edit/delete notes according to block state.
+* Dispatch actions through callbacks rather than owning persistence.
+
+### InformationBar
+
+Owns the non-interactive summary shown on a collapsed block.
+
+Responsibilities:
+
+* Indicate that the block is collapsed.
+* Indicate whether the block has a note.
+* Display the collapsed-block title.
+* Contain no collapse, restore, bookmark, or note editing actions.
 
 The earlier development-only static `Map` should not be the source of truth. Persistent state should come from `ViewManagerLocalPersistence`.
 

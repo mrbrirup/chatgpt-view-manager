@@ -310,12 +310,6 @@
          * @returns {MrbrCvmBlockIdentity}
          */
         getBlockIdentity(block) {
-            const turnId1 = block.dataset.turnId
-                || block.dataset.turnIdContainer
-                || block.closest("[data-turn-id]")?.getAttribute("data-turn-id")
-                || block.closest("[data-turn-id-container]")?.getAttribute("data-turn-id-container")
-                || "";
-            console.log("getBlockIdentity: turnId:", turnId1);
             return {
                 turnId: block.dataset.turnId
                     || block.dataset.turnIdContainer

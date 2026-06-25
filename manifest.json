@@ -20,6 +20,8 @@
         "src/content/viewManagerStrings.js",
         "src/content/viewManagerIcons.js",
         "src/content/viewManagerIconButtonFactory.js",
+        "src/content/hoverToolbar.js",
+        "src/content/informationBar.js",
         "src/content/viewManagerActionsDropdown.js",
         "src/content/viewManagerLocalPersistence.js",
         "src/content/viewManagerNotesManager.js",
@@ -29,6 +31,8 @@
       ],
       "css": [
         "src/content/content.css",
+        "src/content/hoverToolbar.css",
+        "src/content/informationBar.css",
         "src/content/collapsedBlocksManager.css",
         "src/content/viewManagerNotes.css"
       ],

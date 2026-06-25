@@ -7,11 +7,8 @@
      * Manages collapsed block DOM behaviour and collapsed block persistence.
      */
     class CollapsedBlocksManager {
-        static HOVER_BUTTON_DEFAULT_HEIGHT = 32;
-        static INPUT_DEBOUNCE_DELAY = 300;
         static ATTRIBUTE_TURN_ID_CONTAINER = "data-turn-id-container";
         static SELECTOR_TURN_ID_CONTAINER_ATTRIBUTE = `div[${CollapsedBlocksManager.ATTRIBUTE_TURN_ID_CONTAINER}]`;
-        static TOOLBAR_SELECTOR = "div[data-mrbr-cvm-toolbar-collapsed-block]";
         static COLLAPSED_HOST_ATTRIBUTE = "data-mrbr-cvm-collapsed-host-key";
 
         static rootSelectors = [
@@ -26,42 +23,32 @@
          *     scanner?: any,
          *     persistence?: any,
          *     notesManager?: any,
-         *     createIconButton?: (options: any) => HTMLButtonElement,
          *     strings?: { get: (key: string) => string, format?: (key: string, ...values: Array<string | number>) => string },
          *     scheduleDomUpdate?: (callback: () => void) => void,
-         *     render?: () => void,
          *     flashBlock?: (block: HTMLElement) => void,
          *     getScrollRoot?: () => HTMLElement | null,
          *     scrollTurnContainerIntoViewAndVerify?: (item: any, blockPosition?: ScrollLogicalPosition, maxRetries?: number) => Promise<boolean>,
-         *     waitForTurnHydration?: (milliseconds?: number) => Promise<void>
+         *     waitForTurnHydration?: (milliseconds?: number) => Promise<void>,
+         *     informationBar?: any
          * }} [options]
          */
         constructor(options = {}) {
             this.scanner = options.scanner || null;
             this.persistence = options.persistence || null;
             this.notesManager = options.notesManager || null;
-            this.createIconButtonCallback = options.createIconButton || null;
             this.strings = options.strings || window.MrbrCvm.ViewManagerStrings || null;
             this.scheduleDomUpdate = options.scheduleDomUpdate || (callback => window.requestAnimationFrame(callback));
-            this.render = options.render || (() => { });
             this.flashBlock = options.flashBlock || (block => block.classList.add("mrbr-cvm-flash"));
             this.getScrollRootCallback = options.getScrollRoot || null;
             this.scrollTurnContainerIntoViewAndVerify = options.scrollTurnContainerIntoViewAndVerify || null;
             this.waitForTurnHydration = options.waitForTurnHydration || null;
-            this.editBlockNotes = options.editBlockNotes || null;
+            const InformationBar = window.MrbrCvm.InformationBar;
+
+            this.informationBar = options.informationBar
+                || (InformationBar ? new InformationBar({ strings: this.strings }) : null);
 
             /** @type {HTMLElement | null} */
             this.blockHostElement = null;
-            /** @type {HTMLButtonElement | null} */
-            this.hoverButtonElement = null;
-            this.currentHoveredBoxId = "";
-            this.containerMouseOverDebounceTimeoutId = 0;
-            this.containerMouseOverDebounceMilliseconds = 40;
-            this.inputDebounceTimer = 0;
-            this.rootElementMouseMoveDebounceTimeoutId = 0;
-            this.rootElementMouseMoveDebounceMilliseconds = 40;
-            this.buttonHeight = CollapsedBlocksManager.HOVER_BUTTON_DEFAULT_HEIGHT;
-            this.isWired = false;
         }
 
         /**
@@ -123,7 +110,6 @@
                 return;
             }
 
-            this.wireEvents();
             this.applyPersistedCollapsedBlocks();
         }
 
@@ -166,97 +152,6 @@
         }
 
         /**
-         * @returns {HTMLButtonElement | null}
-         */
-        get hoverButton() {
-            if (!this.hoverButtonElement) {
-                this.hoverButtonElement = this.createHoverButton();
-            }
-
-            return this.hoverButtonElement;
-        }
-
-        /**
-         * @returns {HTMLButtonElement | null}
-         */
-        createHoverButton() {
-            const button = this.createIconButton({
-                title: "Collapse",
-                iconName: "collapse",
-                onClick: event => {
-                    this.hoverButtonClickHandler(event);
-                }
-            });
-
-            if (!button) {
-                return null;
-            }
-
-            const style = button.style;
-
-            button.id = "mrbr-cvm-collapse-hover-button";
-            button.classList.add("mrbr-cvm-hover-button");
-            style.position = "fixed";
-            style.zIndex = "100000";
-            style.top = "0px";
-            style.left = "0px";
-            style.borderColor = "rgba(0, 0, 0, 0.86)";
-
-            const buttonBackgroundColor = window.getComputedStyle(button).backgroundColor;
-
-            style.backgroundColor = buttonBackgroundColor.replace(/rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)/, (match, r, g, b) => {
-                return `rgba(${r}, ${g}, ${b}, 0.72)`;
-            });
-
-            return button;
-        }
-
-        /**
-         * @param {{ iconName: string, title: string, onClick?: (event: MouseEvent) => void }} options
-         * @returns {HTMLButtonElement | null}
-         */
-        createIconButton(options) {
-            if (this.createIconButtonCallback) {
-                return this.createIconButtonCallback(options);
-            }
-
-            const ViewManagerIconButtonFactory = window.MrbrCvm?.ViewManagerIconButtonFactory;
-
-            if (!ViewManagerIconButtonFactory) {
-                console.warn("CollapsedBlocksManager: ViewManagerIconButtonFactory not found.");
-                return null;
-            }
-
-            const iconButtonFactory = new ViewManagerIconButtonFactory();
-
-            return iconButtonFactory.createIconButton(options);
-        }
-
-        /**
-         * @returns {void}
-         */
-        wireEvents() {
-            const container = this.rootElement,
-                button = this.hoverButton;
-
-            if (!container || this.isWired) {
-                return;
-            }
-
-            container.addEventListener("mouseover", this.containerMouseOverHandler.bind(this));
-            container.addEventListener("mouseout", this.containerMouseOutHandler.bind(this));
-            container.addEventListener("click", this.containerClickHandler.bind(this));
-            container.addEventListener("input", this.rootElementInputHandler.bind(this));
-            document.addEventListener("mousemove", this.rootElementMouseMoveHandler.bind(this));
-
-            if (button) {
-                button.addEventListener("click", this.hoverButtonClickHandler.bind(this));
-            }
-
-            this.isWired = true;
-        }
-
-        /**
          * @param {HTMLElement} element
          * @returns {string}
          */
@@ -279,238 +174,7 @@
         static isCurrentBoxCollapsed(element) {
             return element.classList.contains("is-shrunk")
                 || element.hasAttribute(CollapsedBlocksManager.COLLAPSED_HOST_ATTRIBUTE)
-                || !!element.querySelector(`${CollapsedBlocksManager.TOOLBAR_SELECTOR}:not([data-mrbr-cvm-toolbar-collapsed-block-hidden])`);
-        }
-
-        /**
-         * @param {MouseEvent} event
-         * @returns {void}
-         */
-        containerMouseOverHandler(event) {
-            const targetElement = event.target instanceof HTMLElement ? event.target : null,
-                relatedElement = event.relatedTarget instanceof HTMLElement ? event.relatedTarget : null;
-
-            if (!targetElement) {
-                return;
-            }
-
-            const box = CollapsedBlocksManager.getClosestTurnContainerIdFromElement(targetElement);
-
-            if (!box || box.closest(".mrbr-cvm-panel")) {
-                return;
-            }
-
-            const boxId = CollapsedBlocksManager.getTurnContainerIdFromElement(box);
-
-            if (!boxId) {
-                return;
-            }
-
-            const relatedBox = relatedElement
-                ? CollapsedBlocksManager.getClosestTurnContainerIdFromElement(relatedElement)
-                : null;
-
-            if (relatedBox === box || boxId === this.currentHoveredBoxId) {
-                return;
-            }
-
-            window.clearTimeout(this.containerMouseOverDebounceTimeoutId);
-
-            this.containerMouseOverDebounceTimeoutId = window.setTimeout(() => {
-                this.containerMouseOverDebounceTimeoutId = 0;
-                this.applyContainerMouseOver(box, event);
-            }, this.containerMouseOverDebounceMilliseconds);
-        }
-
-        /**
-         * @param {HTMLElement} box
-         * @param {MouseEvent} event
-         * @returns {void}
-         */
-        applyContainerMouseOver(box, event) {
-            const container = this.rootElement,
-                button = this.hoverButton,
-                boxId = CollapsedBlocksManager.getTurnContainerIdFromElement(box);
-
-            if (!container || !button || !boxId) {
-                return;
-            }
-
-            if (this.currentHoveredBoxId && this.currentHoveredBoxId !== boxId) {
-                const existingBox = container.querySelector(
-                    `div[data-turn-id-container="${CSS.escape(this.currentHoveredBoxId)}"]`
-                );
-
-                existingBox?.classList.remove("mrbr-cvm-collapsed-block-target");
-            }
-
-            this.currentHoveredBoxId = boxId;
-            box.classList.add("mrbr-cvm-collapsed-block-target");
-
-            if (button.parentElement !== container) {
-                container.appendChild(button);
-
-                const buttonHeight = button.offsetHeight || CollapsedBlocksManager.HOVER_BUTTON_DEFAULT_HEIGHT,
-                    iconStyle = button.querySelector("svg")?.style;
-
-                this.buttonHeight = buttonHeight;
-
-                if (iconStyle) {
-                    iconStyle.width = `${buttonHeight}px`;
-                    iconStyle.height = `${buttonHeight}px`;
-                }
-            }
-
-            button.classList.toggle("hidden", CollapsedBlocksManager.isCurrentBoxCollapsed(box));
-            this.positionHoverButton(event);
-            container.dispatchEvent(this.createOnEnterBlockEvent(event));
-        }
-
-        /**
-         * @param {MouseEvent} event
-         * @returns {void}
-         */
-        containerMouseOutHandler(event) {
-            const container = this.rootElement,
-                target = event.target instanceof HTMLElement ? event.target : null,
-                related = event.relatedTarget instanceof HTMLElement ? event.relatedTarget : null,
-                box = CollapsedBlocksManager.getClosestTurnContainerIdFromElement(target);
-
-            if (!container || !box) {
-                return;
-            }
-
-            if (!related || !box.contains(related)) {
-                box.classList.remove("mrbr-cvm-collapsed-block-target");
-                container.dispatchEvent(this.createOnExitBlockEvent(event));
-            }
-        }
-
-        /**
-         * @param {MouseEvent} event
-         * @returns {void}
-         */
-        containerClickHandler(event) {
-            const target = event.target instanceof HTMLElement ? event.target : null;
-
-            if (!target) {
-                return;
-            }
-
-            const button = target.closest(".mrbr-cvm-icon-button"),
-                action = button?.getAttribute("data-mrbr-cvm-collapsed-action");
-
-            if (action !== "restore") {
-                return;
-            }
-
-            const box = CollapsedBlocksManager.getClosestTurnContainerIdFromElement(target);
-
-            if (!box) {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            this.restoreCollapsedBlockForElement(box).catch(error => {
-                console.error("CollapsedBlocksManager: restore failed.", error);
-            });
-        }
-
-        /**
-         * @param {MouseEvent} event
-         * @returns {void}
-         */
-        hoverButtonClickHandler(event) {
-            event.preventDefault();
-            event.stopPropagation();
-
-            const box = this.getTurnIdContainerById(this.currentHoveredBoxId);
-
-            if (!box) {
-                console.warn("CollapsedBlocksManager: No box found for the current hovered box ID:", this.currentHoveredBoxId);
-                return;
-            }
-
-            this.collapseBlock(box).catch(error => {
-                console.error("CollapsedBlocksManager: collapse failed.", error);
-            });
-        }
-
-        /**
-         * @param {InputEvent} event
-         * @returns {void}
-         */
-        rootElementInputHandler(event) {
-            const target = event.target;
-
-            if (!(target instanceof HTMLInputElement)) {
-                return;
-            }
-
-            if (!target.classList.contains("mrbr-cvm-toolbar-collapsed-block-label")) {
-                return;
-            }
-
-            window.clearTimeout(this.inputDebounceTimer);
-
-            this.inputDebounceTimer = window.setTimeout(() => {
-                const box = CollapsedBlocksManager.getClosestTurnContainerIdFromElement(target),
-                    newLabel = target.value.trim();
-
-                if (!box) {
-                    return;
-                }
-
-                this.updateCollapsedBlockTitleForElement(box, newLabel).catch(error => {
-                    console.error("CollapsedBlocksManager: label update failed.", error);
-                });
-            }, CollapsedBlocksManager.INPUT_DEBOUNCE_DELAY);
-        }
-
-        /**
-         * Positions the hover collapse button beside the hovered turn.
-         *
-         * The button is fixed to the viewport so ChatGPT scroll-root changes do not
-         * break its movement. It still uses the scroll root bounds so it stays aligned
-         * with the conversation area rather than the whole browser window.
-         *
-         * @param {MouseEvent} event
-         * @returns {void}
-         */
-        positionHoverButton(event) {
-            const button = this.hoverButton,
-                container = this.getScrollRoot() || this.rootElement;
-
-            if (!button || !container || button.classList.contains("hidden")) {
-                return;
-            }
-
-            const containerRect = container.getBoundingClientRect(),
-                buttonHeight = button.offsetHeight || this.buttonHeight || CollapsedBlocksManager.HOVER_BUTTON_DEFAULT_HEIGHT,
-                minimumTop = containerRect.top,
-                maximumTop = Math.max(containerRect.top, containerRect.bottom - buttonHeight),
-                requestedTop = event.clientY - (buttonHeight / 2),
-                boundedTop = Math.min(Math.max(requestedTop, minimumTop), maximumTop),
-                requestedLeft = containerRect.left + 4;
-
-            this.buttonHeight = buttonHeight;
-            button.style.position = "fixed";
-            button.style.top = `${boundedTop}px`;
-            button.style.left = `${requestedLeft}px`;
-        }
-
-        /**
-         * @param {MouseEvent} event
-         * @returns {void}
-         */
-        rootElementMouseMoveHandler(event) {
-            window.clearTimeout(this.rootElementMouseMoveDebounceTimeoutId);
-
-            this.rootElementMouseMoveDebounceTimeoutId = window.setTimeout(() => {
-                this.positionHoverButton(event);
-            }, this.rootElementMouseMoveDebounceMilliseconds);
+                || !!element.querySelector("[data-mrbr-cvm-information-bar]:not([hidden])");
         }
 
         /**
@@ -540,6 +204,14 @@
          * @returns {HTMLElement | null}
          */
         getConversationBlockForElement(element) {
+            const assignedBlock = element.matches?.("[data-mrbr-cvm-block-key]")
+                ? element
+                : element.querySelector?.("[data-mrbr-cvm-block-key]");
+
+            if (assignedBlock instanceof HTMLElement) {
+                return assignedBlock;
+            }
+
             const blocks = this.scanner?.findBlocks?.() || [];
 
             return blocks.find(block => {
@@ -639,8 +311,6 @@
 
             this.scheduleDomUpdate(() => {
                 this.applyCollapsedBlockToElement(host, collapsedBlock);
-                this.hoverButton?.classList.add("hidden");
-                this.render();
             });
 
             return collapsedBlock;
@@ -664,9 +334,6 @@
          * @returns {void}
          */
         applyCollapsedBlockToElement(host, collapsedBlock) {
-            const toolbar = this.getOrCreateCollapsedBlockToolbar(host),
-                input = toolbar.querySelector(".mrbr-cvm-toolbar-collapsed-block-label");
-
             this.createCollapsingWrapper(host);
 
             host.classList.add("is-shrunk");
@@ -676,59 +343,7 @@
                 host.setAttribute("data-mrbr-cvm-collapsed-host-turn-id", collapsedBlock.turnId);
             }
 
-            if (input instanceof HTMLInputElement) {
-                input.value = this.getCollapsedBlockTitle(collapsedBlock);
-            }
-
-            this.updateCollapsedToolbarNoteState(toolbar, collapsedBlock);
-
-            delete toolbar.dataset.mrbrCvmToolbarCollapsedBlockHidden;
-            toolbar.removeAttribute("data-mrbr-cvm-toolbar-collapsed-block-hidden");
-
-            if (toolbar.parentElement !== host) {
-                host.appendChild(toolbar);
-            }
-        }
-
-        /**
-         * Updates the collapsed-block toolbar note icon to indicate whether notes exist.
-         *
-         * @param {HTMLElement} toolbar
-         * @param {any} collapsedBlock
-         * @returns {void}
-         */
-        updateCollapsedToolbarNoteState(toolbar, collapsedBlock) {
-            const noteButton = toolbar.querySelector('[data-mrbr-cvm-collapsed-action="note"]'),
-                blockNotes = this.notesManager?.getCollapsedBlockNotes?.(collapsedBlock)
-                    || this.notesManager?.getBlockNotes?.(collapsedBlock?.blockKey)
-                    || collapsedBlock?.notes
-                    || "",
-                hasNotes = blockNotes.length > 0;
-
-            if (!(noteButton instanceof HTMLElement)) {
-                return;
-            }
-
-            noteButton.classList.toggle("mrbr-cvm-note-button-active", hasNotes);
-            noteButton.classList.toggle("mrbr-cvm-has-note", hasNotes);
-            noteButton.setAttribute("aria-pressed", hasNotes ? "true" : "false");
-            noteButton.setAttribute("title", hasNotes
-                ? `${this.getString("hasNotes")}: ${blockNotes}`
-                : this.getString("noNotes"));
-        }
-
-        /**
-         * @param {HTMLElement} host
-         * @returns {HTMLElement}
-         */
-        getOrCreateCollapsedBlockToolbar(host) {
-            let toolbar = host.querySelector(CollapsedBlocksManager.TOOLBAR_SELECTOR);
-
-            if (!(toolbar instanceof HTMLElement)) {
-                toolbar = this.createCollapsedBlock();
-            }
-
-            return toolbar;
+            this.updateInformationBar(host, collapsedBlock);
         }
 
         /**
@@ -748,85 +363,25 @@
             return null;
         }
 
-        static collapsedBlockElement = `
-            <div data-mrbr-cvm-toolbar-collapsed-block data-mrbr-cvm-toolbar-collapsed-block-hidden>
-                <div class="mrbr-cvm-toolbar" data-mrbr-cvm-toolbar-tools>
-                    <div class="mrbr-cvm-toolbar-collapsed-block"></div>
-                    <span><input class="mrbr-cvm-toolbar-collapsed-block-label" type="text"></span>
-                </div>
-            </div>`;
-
         /**
-         * @returns {HTMLElement}
+         * Updates the display-only information bar for a collapsed block.
+         *
+         * @param {HTMLElement} host
+         * @param {any} collapsedBlock
+         * @returns {void}
          */
-        createCollapsedBlock() {
-            const parsedElement = new DOMParser().parseFromString(CollapsedBlocksManager.collapsedBlockElement, "text/html"),
-                collapsedBlock = parsedElement.body.firstElementChild,
-                toolbar = collapsedBlock?.querySelector(".mrbr-cvm-toolbar-collapsed-block");
-
-            if (!(collapsedBlock instanceof HTMLElement)) {
-                throw new Error("CollapsedBlocksManager: Failed to create collapsed block toolbar.");
-            }
-
-            if (!(toolbar instanceof HTMLElement)) {
-                return collapsedBlock;
-            }
-
-            const restoreButton = this.createIconButton({
-                    title: "Restore",
-                    iconName: "restore"
-                }),
-                noteButton = this.createIconButton({
-                    title: "Note",
-                    iconName: "note",
-                    onClick: event => {
-                        event.preventDefault();
-                        event.stopPropagation();
-
-                        const host = CollapsedBlocksManager.getClosestTurnContainerIdFromElement(event.target instanceof HTMLElement ? event.target : null),
-                            identity = host ? this.getIdentityForElement(host) : null,
-                            collapsedBlockState = identity ? this.findCollapsedBlockByIdentity(identity) : null;
-
-                        this.editBlockNotes?.({
-                            element: host,
-                            identity,
-                            collapsedBlock: collapsedBlockState
-                        });
-                    }
-                });
-
-            if (restoreButton) {
-                restoreButton.setAttribute("data-mrbr-cvm-collapsed-action", "restore");
-                toolbar.appendChild(restoreButton);
-            }
-
-            if (noteButton) {
-                noteButton.setAttribute("data-mrbr-cvm-collapsed-action", "note");
-                noteButton.classList.add("mrbr-cvm-note-button");
-                toolbar.appendChild(noteButton);
-            }
-
-            return collapsedBlock;
-        }
-
-        /**
-         * @param {HTMLElement} element
-         * @param {string} title
-         * @returns {Promise<void>}
-         */
-        async updateCollapsedBlockTitleForElement(element, title) {
-            const identity = this.getIdentityForElement(element),
-                collapsedBlock = this.findCollapsedBlockByIdentity(identity);
-
-            if (!collapsedBlock) {
+        updateInformationBar(host, collapsedBlock) {
+            if (!this.informationBar) {
                 return;
             }
 
-            collapsedBlock.title = title;
-            collapsedBlock.updatedUtc = new Date().toISOString();
-
-            await this.persistence.saveState();
-            this.render();
+            this.informationBar.show(host, {
+                title: this.getCollapsedBlockTitle(collapsedBlock),
+                notes: this.notesManager?.getCollapsedBlockNotes?.(collapsedBlock)
+                    || this.notesManager?.getBlockNotes?.(collapsedBlock?.blockKey)
+                    || collapsedBlock?.notes
+                    || ""
+            });
         }
 
         /**
@@ -866,8 +421,6 @@
                 if (element) {
                     this.restoreCollapsedBlockDomOnlyForElement(element);
                 }
-
-                this.render();
             });
         }
 
@@ -894,7 +447,6 @@
                 });
 
                 this.removeOrphanedCollapsedDomState();
-                this.render();
             });
         }
 
@@ -903,8 +455,7 @@
          * @returns {void}
          */
         restoreCollapsedBlockDomOnlyForElement(element) {
-            const host = this.getCollapseHostElement(element),
-                toolbar = host.querySelector(CollapsedBlocksManager.TOOLBAR_SELECTOR);
+            const host = this.getCollapseHostElement(element);
 
             host.classList.remove("is-shrunk");
             host.removeAttribute(CollapsedBlocksManager.COLLAPSED_HOST_ATTRIBUTE);
@@ -914,10 +465,7 @@
                 content.removeAttribute("data-mrbr-cvm-collapsing-content");
             });
 
-            if (toolbar instanceof HTMLElement) {
-                toolbar.dataset.mrbrCvmToolbarCollapsedBlockHidden = "true";
-                toolbar.setAttribute("data-mrbr-cvm-toolbar-collapsed-block-hidden", "true");
-            }
+            this.informationBar?.hide?.(host);
         }
 
         /**
@@ -1106,37 +654,6 @@
             return "Collapsed block";
         }
 
-        /**
-         * @param {MouseEvent} event
-         * @returns {CustomEvent}
-         */
-        createOnEnterBlockEvent(event) {
-            return new CustomEvent("onEnterBlock", {
-                detail: {
-                    message: "Mouse entered a block",
-                    time: new Date(),
-                    originalEvent: event
-                },
-                bubbles: true,
-                cancelable: true
-            });
-        }
-
-        /**
-         * @param {MouseEvent} event
-         * @returns {CustomEvent}
-         */
-        createOnExitBlockEvent(event) {
-            return new CustomEvent("onExitBlock", {
-                detail: {
-                    message: "Mouse exited a block",
-                    time: new Date(),
-                    originalEvent: event
-                },
-                bubbles: true,
-                cancelable: true
-            });
-        }
     }
 
     window.MrbrCvm.CollapsedBlocksManager = CollapsedBlocksManager;

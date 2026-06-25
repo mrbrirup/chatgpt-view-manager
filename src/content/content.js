@@ -217,12 +217,17 @@
 
 
     const CollapsedBlocksManager = window.MrbrCvm?.CollapsedBlocksManager;
+    const HoverToolbar = window.MrbrCvm?.HoverToolbar;
     const ViewManagerLocalPersistence = window.MrbrCvm?.ViewManagerLocalPersistence;
     const ViewManagerImportExport = window.MrbrCvm?.ViewManagerImportExport;
     const ViewManagerNotesManager = window.MrbrCvm?.ViewManagerNotesManager;
 
     if (!CollapsedBlocksManager) {
         throw new Error("ChatGPT View Manager failed to load CollapsedBlocksManager.");
+    }
+
+    if (!HoverToolbar) {
+        throw new Error("ChatGPT View Manager failed to load HoverToolbar.");
     }
 
     if (!ViewManagerLocalPersistence) {
@@ -272,23 +277,41 @@
                 persistence: this.persistence,
                 notesManager: this.notesManager,
                 strings: ViewManagerStrings,
-                createIconButton: options => this.createIconButton(options),
                 scheduleDomUpdate: callback => this.scheduleDomUpdate(callback),
-                render: () => {
-                    this.syncStateReferences();
-                    this.render();
-                },
                 flashBlock: block => this.flashBlock(block),
                 getScrollRoot: () => this.getScrollRoot(),
                 scrollTurnContainerIntoViewAndVerify: (item, blockPosition, maxRetries) => {
                     return this.scrollTurnContainerIntoViewAndVerify(item, blockPosition, maxRetries);
                 },
-                waitForTurnHydration: milliseconds => this.waitForTurnHydration(milliseconds),
-                editBlockNotes: request => this.editBlockNotesFromCollapsedToolbar(request)
+                waitForTurnHydration: milliseconds => this.waitForTurnHydration(milliseconds)
             });
 
             MrbrChatGptViewManager.collapsedBlocksManager = this.collapsedBlocksManager;
             this.collapsedBlocksManager.init();
+
+            this.hoverToolbar = new HoverToolbar({
+                getRootElement: () => this.getScrollRoot(),
+                getTargetElement: element => {
+                    const host = element.closest("[data-turn-id-container]");
+
+                    if (!(host instanceof HTMLElement)) {
+                        return null;
+                    }
+
+                    return this.collapsedBlocksManager.getConversationBlockForElement(host)
+                        ? host
+                        : null;
+                },
+                getState: element => this.getHoverToolbarState(element),
+                createIconButton: options => this.createIconButton(options),
+                strings: ViewManagerStrings,
+                onCollapse: element => this.collapseBlock(element),
+                onRestore: element => this.restoreCollapsedBlockForElement(element),
+                onAddBookmark: element => this.addBookmarkForBlockElement(element),
+                onRemoveBookmark: element => this.removeBookmarkForBlockElement(element),
+                onEditNotes: element => this.editNotesForBlockElement(element)
+            });
+            this.hoverToolbar.init();
         }
         static PANEL_ID = "mrbr-cvm-panel";
         static STORAGE_KEY = "mrbrChatGptViewManagerState";
@@ -301,6 +324,8 @@
         importExport = null;
         /** @type {InstanceType<typeof CollapsedBlocksManager> | null} */
         collapsedBlocksManager = null;
+        /** @type {InstanceType<typeof HoverToolbar> | null} */
+        hoverToolbar = null;
         /**
          * @type {HTMLDivElement | null}
          */
@@ -325,11 +350,6 @@
                 }
             }
         };
-
-        /**
-         * @type {HTMLElement | null}
-         */
-        pendingCollapseBlock = null;
 
         /**
         * @type {number}
@@ -1134,6 +1154,134 @@
              */
             Draw.draw(() => { document.documentElement.appendChild(self.panelElement); });
         }
+
+        /**
+         * Gets current interaction state for a conversation block's hover toolbar.
+         *
+         * @param {HTMLElement} element
+         * @returns {{ isCollapsed: boolean, isBookmarked: boolean, hasNotes: boolean }}
+         */
+        getHoverToolbarState(element) {
+            const identity = this.collapsedBlocksManager.getIdentityForElement(element),
+                collapsedBlock = this.collapsedBlocksManager.findCollapsedBlockByIdentity(identity),
+                bookmark = this.notesManager.findBookmarkForIdentity(identity);
+
+            return {
+                isCollapsed: Boolean(collapsedBlock),
+                isBookmarked: Boolean(bookmark),
+                hasNotes: Boolean(
+                    this.notesManager.hasBlockNotes(identity.blockKey)
+                    || this.notesManager.hasBookmarkNotes(bookmark)
+                    || this.notesManager.hasCollapsedBlockNotes(collapsedBlock)
+                )
+            };
+        }
+
+        /**
+         * Adds a bookmark for a specific conversation block.
+         *
+         * @param {HTMLElement} element
+         * @returns {Promise<boolean>}
+         */
+        async addBookmarkForBlockElement(element) {
+            const block = this.collapsedBlocksManager.getConversationBlockForElement(element) || element,
+                identity = this.collapsedBlocksManager.getIdentityForElement(element),
+                existingBookmark = this.notesManager.findBookmarkForIdentity(identity);
+
+            if (existingBookmark) {
+                return false;
+            }
+
+            this.highlightPendingBookmark(block);
+
+            try {
+                const defaultTitle = this.scanner.getBlockTitle(block),
+                    title = await this.showTextInputDialog({
+                        title: this.getString("addBookmarkTitle"),
+                        label: this.getString("bookmarkTitleLabel"),
+                        value: defaultTitle
+                    });
+
+                if (!title || (!identity.blockKey && !identity.turnId)) {
+                    return false;
+                }
+
+                const ViewManagerBookmark = window.MrbrCvm.ViewManagerBookmark;
+
+                this.state.bookmarks.push(new ViewManagerBookmark({
+                    id: crypto.randomUUID(),
+                    title: this.notesManager.sanitizeTitleText(title),
+                    notes: this.notesManager.getBlockNotes(identity.blockKey),
+                    turnId: identity.turnId,
+                    blockKey: identity.blockKey || identity.turnId || "",
+                    blockIndex: identity.blockIndex,
+                    role: identity.role,
+                    contentHash: identity.contentHash,
+                    createdUtc: new Date().toISOString()
+                }));
+
+                await this.saveState();
+                this.render();
+
+                return true;
+            } finally {
+                block.classList.remove("mrbr-cvm-pending-bookmark");
+            }
+        }
+
+        /**
+         * Removes the bookmark associated with a conversation block.
+         *
+         * Block-level notes remain available after bookmark removal.
+         *
+         * @param {HTMLElement} element
+         * @returns {Promise<boolean>}
+         */
+        async removeBookmarkForBlockElement(element) {
+            const identity = this.collapsedBlocksManager.getIdentityForElement(element),
+                bookmark = this.notesManager.findBookmarkForIdentity(identity);
+
+            if (!bookmark) {
+                return false;
+            }
+
+            this.state.bookmarks = this.state.bookmarks.filter(item => item.id !== bookmark.id);
+            await this.saveState({ mergeFromStorage: false });
+            this.render();
+
+            return true;
+        }
+
+        /**
+         * Opens the note editor for a specific conversation block.
+         *
+         * Clearing the note deletes it. Adding a note to an ordinary block creates a
+         * bookmark, matching the existing notes behaviour.
+         *
+         * @param {HTMLElement} element
+         * @returns {Promise<void>}
+         */
+        async editNotesForBlockElement(element) {
+            const block = this.collapsedBlocksManager.getConversationBlockForElement(element) || element;
+
+            await this.notesManager.editNotesForBlockElement(block);
+            this.syncStateReferences();
+            this.applyCollapsedBlocks();
+            this.render();
+        }
+
+        /**
+         * Restores the collapsed block represented by a conversation element.
+         *
+         * @param {HTMLElement} element
+         * @returns {Promise<void>}
+         */
+        async restoreCollapsedBlockForElement(element) {
+            await this.collapsedBlocksManager.restoreCollapsedBlockForElement(element);
+            this.syncStateReferences();
+            this.render();
+        }
+
         /**
          * Collapses the currently visible conversation block.
          *
@@ -1160,6 +1308,8 @@
             const self = this;
 
             self.scheduleDomUpdate(() => {
+                self.hoverToolbar?.refresh();
+
                 if (!self.panelElement) {
                     return;
                 }
@@ -1174,7 +1324,6 @@
                     self.actionsDropdown = null;
                 }
 
-                self.panelElement.innerHTML = "";
                 self.panelElement.classList.remove("mrbr-cvm-panel-collapsed");
                 self.#clearButton = null;
 
@@ -1203,19 +1352,17 @@
 
                 listsContainerElement.className = "mrbr-cvm-lists-container";
 
-                Draw.draw(() => {
-                    listsContainerElement.append(
-                        self.createBookmarksListElement(),
-                        self.createCollapsedBlocksListElement()
-                    );
+                listsContainerElement.replaceChildren(
+                    self.createBookmarksListElement(),
+                    self.createCollapsedBlocksListElement()
+                );
 
-                    self.panelElement.append(
-                        headerElement,
-                        statusElement,
-                        self.createToolbarElement(),
-                        listsContainerElement
-                    );
-                });
+                self.panelElement.replaceChildren(
+                    headerElement,
+                    statusElement,
+                    self.createToolbarElement(),
+                    listsContainerElement
+                );
             });
         }
         /**
@@ -1640,41 +1787,11 @@
             const block = this.findBestVisibleBlock();
 
             if (!block) {
-                alert("No visible conversation block was found.");
+                alert(this.getString("noVisibleConversationBlockFound"));
                 return;
             }
 
-            this.highlightPendingBookmark(block);
-
-            const identity = this.scanner.getBlockIdentity(block),
-                defaultTitle = this.scanner.getBlockTitle(block),
-                title = await this.showTextInputDialog({
-                    title: this.getString("addBookmarkTitle"),
-                    label: this.getString("bookmarkTitleLabel"),
-                    value: defaultTitle
-                });
-
-            if (!title || !identity.blockKey) {
-                block.classList.remove("mrbr-cvm-pending-bookmark");
-                return;
-            }
-
-            this.state.bookmarks.push({
-                id: crypto.randomUUID(),
-                title,
-                notes: "",
-                turnId: identity.turnId,
-                blockKey: identity.blockKey,
-                blockIndex: identity.blockIndex,
-                role: identity.role,
-                contentHash: identity.contentHash,
-                createdUtc: new Date().toISOString()
-            });
-
-            block.classList.remove("mrbr-cvm-pending-bookmark");
-
-            await this.saveState();
-            this.render();
+            await this.addBookmarkForBlockElement(block);
         }
         /**
          * Scrolls to a bookmark's block.
@@ -1684,7 +1801,6 @@
          * @returns {Promise<HTMLElement | null>} The block element or null if not found.
          */
         async goToBookmark(bookmark, reportNotFound = true) {
-            console.log("Going to bookmark:", JSON.stringify(bookmark));
             const block = await this.findBlockByIdentityWithTurnContainer(bookmark);
 
             if (!block) {
@@ -1704,18 +1820,6 @@
             this.flashBlock(block);
 
             return block;
-        }
-        /**
-         * Removes collapsed-block DOM effects while the Collapsed Blocks feature is disabled for MVP.
-         *
-         * @returns {void}
-         */
-        removeCollapsedBlocksDomStateForMvp() {
-            document
-                .querySelectorAll(".mrbr-cvm-collapsed-placeholder")
-                .forEach(element => {
-                    element.remove();
-                });
         }
         /**
          * Finds a block, using the turn container to trigger hydration if needed.
@@ -2196,60 +2300,6 @@
             });
         }
 
-
-        /**
-         * Highlights the block that will be collapsed if the user clicks
-         * Collapse Highlighted.
-         *
-         * @returns {void}
-         */
-        highlightCollapseTarget() {
-            this.clearCollapseTargetHighlight();
-
-            const block = this.findBestVisibleBlock();
-
-            if (!block) {
-                this.pendingCollapseBlock = null;
-                return;
-            }
-
-            this.pendingCollapseBlock = block;
-
-            this.scheduleDomUpdate(() => {
-                block.classList.add("mrbr-cvm-collapse-target");
-            });
-        }
-
-        /**
-         * Clears the pending collapse target highlight.
-         *
-         * @returns {void}
-         */
-        clearCollapseTargetHighlight() {
-            this.scheduleDomUpdate(() => {
-                document
-                    .querySelectorAll(".mrbr-cvm-collapse-target")
-                    .forEach(element => element.classList.remove("mrbr-cvm-collapse-target"));
-            });
-
-            this.pendingCollapseBlock = null;
-        }
-
-        /**
-         * Collapses the currently highlighted conversation block.
-         *
-         * @returns {Promise<void>}
-         */
-        async collapseHighlightedBlock() {
-            const block = this.pendingCollapseBlock || this.findBestVisibleBlock();
-
-            if (!block) {
-                alert(this.getString("noHighlightedConversationBlockFound"));
-                return;
-            }
-
-            await this.collapseBlock(block);
-        }
         /**
         * Collapses a specific conversation block.
         *
@@ -2258,7 +2308,6 @@
         */
         async collapseBlock(block) {
             await this.collapsedBlocksManager.collapseBlock(block);
-            this.clearCollapseTargetHighlight();
             this.syncStateReferences();
             this.render();
         }
@@ -2273,42 +2322,6 @@
         }
 
         /**
-         * Collapses a single block element and creates its placeholder.
-         *
-         * @param {HTMLElement} block
-         * @param {MrbrCvmCollapsedBlock} collapsedBlock
-         * @returns {void}
-         */
-        collapseBlockElement(block, collapsedBlock) {
-            this.collapsedBlocksManager.applyCollapsedBlockToElement(block, collapsedBlock);
-        }
-
-        /**
-         * Creates a collapsed block placeholder.
-         *
-         * @param {MrbrCvmCollapsedBlock} collapsedBlock
-         * @returns {HTMLDivElement}
-         */
-        createCollapsePlaceholder(collapsedBlock) {
-            const placeholderElement = document.createElement("div");
-
-            placeholderElement.className = "mrbr-cvm-collapsed-placeholder";
-            placeholderElement.setAttribute("data-mrbr-cvm-placeholder-key", collapsedBlock.blockKey || "");
-            placeholderElement.textContent = this.getCollapsedBlockTitle(collapsedBlock);
-
-            return placeholderElement;
-        }
-
-        /**
-         * Finds an existing collapse placeholder.
-         *
-         * @param {MrbrCvmCollapsedBlock} collapsedBlock
-         * @returns {HTMLElement | null}
-         */
-        findCollapsePlaceholder(collapsedBlock) {
-            return this.collapsedBlocksManager.findElementForCollapsedBlock(collapsedBlock);
-        }
-        /**
          * Restores a collapsed block.
          *
          * @param {MrbrCvmCollapsedBlock} collapsedBlock
@@ -2318,15 +2331,6 @@
             await this.collapsedBlocksManager.restoreCollapsedBlock(collapsedBlock);
             this.syncStateReferences();
             this.render();
-        }
-
-        /**
-         * Removes placeholder elements that no longer have matching collapsed state.
-         *
-         * @returns {void}
-         */
-        removeOrphanedCollapsePlaceholders() {
-            this.collapsedBlocksManager.removeOrphanedCollapsedDomState();
         }
         /**
          * Schedules DOM work for the next animation frame.
@@ -2558,19 +2562,6 @@
         }
 
         /**
-         * Handles note requests raised by the collapsed-block toolbar.
-         *
-         * @param {{ element?: HTMLElement | null, identity?: any, collapsedBlock?: any }} request
-         * @returns {Promise<void>}
-         */
-        async editBlockNotesFromCollapsedToolbar(request) {
-            await this.notesManager.editNotesForBlockRequest(request);
-            this.syncStateReferences();
-            this.applyCollapsedBlocks();
-            this.render();
-        }
-
-        /**
          * Opens the note-only editor for a bookmark.
          *
          * @param {MrbrCvmBookmark} bookmark
@@ -2654,7 +2645,6 @@
                 return;
             }
 
-            this.panelElement.innerHTML = "";
             this.panelElement.classList.add("mrbr-cvm-panel-collapsed");
 
             const expandButton = this.createIconButton({
@@ -2665,7 +2655,7 @@
                 }
             });
 
-            this.panelElement.append(expandButton);
+            this.panelElement.replaceChildren(expandButton);
         }
         /**
          * Gets a UI string.

@@ -14,17 +14,16 @@ The project was created to solve a practical problem: long ChatGPT conversations
 
 This project is currently in MVP development.
 
-The MVP focuses on:
+The current extension focuses on:
 
 * Bookmarking conversation turns
+* Collapsing and restoring conversation turns
 * Reliable navigation to bookmarked turns
-* Bookmark editing and notes
+* Bookmark and block notes
 * Filtering bookmarks
 * Local persistence per ChatGPT conversation
 * Import/export of saved View Manager data
 * Light, dark, and auto themes
-
-The previous Collapsed Blocks feature has been excluded from the MVP for stability reasons. The code may still contain some collapsed-block-related functions for later review, but the MVP user interface does not expose that workflow.
 
 ---
 
@@ -82,6 +81,28 @@ You can update:
 
 Bookmark notes are included in filtering and export/import data.
 
+### Hover Toolbar
+
+Hovering a conversation block shows a contextual toolbar for:
+
+* Collapse or restore
+* Add or remove bookmark
+* Add, edit, or delete notes
+* Minimise or expand the toolbar
+
+The toolbar owns hover interaction and presentation state. Feature operations are
+provided through callbacks so it does not directly own persistence.
+
+### Collapsed Block Information Bar
+
+A collapsed block displays a compact, non-interactive information bar showing:
+
+* That the block is collapsed
+* Whether it has a note
+* Its saved title
+
+Collapse, restore, bookmark, and note actions remain in the Hover Toolbar.
+
 ### Filtering
 
 The View Manager panel includes a compact filter box.
@@ -125,29 +146,22 @@ This allows backup, transfer, and manual inspection of saved View Manager data.
 
 ## MVP Scope
 
-Included in the MVP:
+Included in the current feature set:
 
 * Floating View Manager panel
 * Conversation block detection
 * Bookmark creation
 * Bookmark editing
 * Bookmark notes
+* Collapsing and restoring blocks
+* Contextual Hover Toolbar
+* Collapsed-block Information Bar
 * Bookmark navigation
 * Bookmark filtering
 * Theme switching
 * Import/export
 * Conversation-scoped state
 * Local Chrome storage persistence
-
-Excluded from the MVP:
-
-* Collapsing ChatGPT conversation blocks
-* Collapsed Blocks overlay section
-* Restore collapsed blocks
-* Collapse toolbar button
-* Collapsed-block navigation
-
-Collapsed Blocks may return in a later milestone once the interaction with ChatGPT’s virtualised scrolling and lazy hydration is stable enough.
 
 ---
 
@@ -182,7 +196,13 @@ chatgpt-view-manager/
     content/
       content.js
       content.css
+      hoverToolbar.js
+      hoverToolbar.css
+      informationBar.js
+      informationBar.css
       conversationScanner.js
+      collapsedBlocksManager.js
+      collapsedBlocksManager.css
       viewManagerActionsDropdown.js
       viewManagerIconButtonFactory.js
       viewManagerIcons.js
@@ -250,7 +270,6 @@ This is intended to make bookmark navigation more reliable in long conversations
 * Long conversations can still produce visible scroll jitter.
 * Navigation reliability depends on ChatGPT’s current virtualised rendering behaviour.
 * The extension is currently focused on Chrome.
-* The MVP intentionally excludes collapsed-block workflows.
 * Import currently replaces saved View Manager state rather than merging it.
 * Filter text is not currently persisted.
 * The extension has not yet been packaged for Chrome Web Store distribution.
@@ -263,14 +282,13 @@ Current priorities:
 
 * Stabilise bookmark navigation
 * Keep the MVP small and reliable
-* Avoid over-focusing on collapsed-block behaviour
+* Stabilise collapsed-block behaviour
 * Maintain clean vanilla JavaScript
 * Keep DOM updates scheduled and controlled
 * Avoid unnecessary work during ChatGPT DOM mutations
 
 Later priorities may include:
 
-* Reintroducing Collapsed Blocks behind a feature flag
 * Better performance handling for very long conversations
 * Optional persisted filters
 * Per-conversation panel settings
@@ -290,6 +308,8 @@ This project currently uses:
 * Vanilla JavaScript
 * JSDoc typing
 * Small content-side helper classes
+* Class-based OOP and encapsulation as the preferred design style
+* Dedicated UI classes for contextual interaction and state-only information
 * No build step
 * CSS custom properties
 * Chrome extension APIs
@@ -332,7 +352,7 @@ The exported JSON file may contain bookmark titles and notes written by the user
 
 ### Later Milestones
 
-* [ ] Collapsed Blocks redesign
+* [x] Hover Toolbar and collapsed Information Bar split
 * [ ] Feature flag support
 * [ ] Performance pass for long conversations
 * [ ] Storage migration hardening

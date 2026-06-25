@@ -333,11 +333,14 @@
         }
 
         /**
+         * @param {boolean} [mergeFromStorage]
          * @returns {Promise<void>}
          */
-        async saveAndRender() {
+        async saveAndRender(mergeFromStorage = true) {
             if (this.persistence) {
-                await this.persistence.saveState(this.getState());
+                await this.persistence.saveState(this.getState(), {
+                    mergeFromStorage
+                });
             }
 
             this.render();
@@ -348,6 +351,7 @@
          * @returns {Promise<boolean>}
          */
         async editBookmarkNotes(bookmark) {
+            const hadNotes = this.hasBookmarkNotes(bookmark);
             const result = await this.showNotesDialog({
                 dialogTitle: this.getString("editBookmarkNotesTitle"),
                 label: this.getString("bookmarkNotes"),
@@ -359,7 +363,7 @@
             }
 
             this.setBookmarkNotes(bookmark, result.notes);
-            await this.saveAndRender();
+            await this.saveAndRender(!(hadNotes && !result.notes));
 
             return true;
         }
@@ -369,6 +373,7 @@
          * @returns {Promise<boolean>}
          */
         async editCollapsedBlockNotes(collapsedBlock) {
+            const hadNotes = this.hasCollapsedBlockNotes(collapsedBlock);
             const result = await this.showNotesDialog({
                 dialogTitle: this.getString("collapsedBlockNotesTitle"),
                 label: this.getString("bookmarkNotes"),
@@ -380,7 +385,7 @@
             }
 
             this.setCollapsedBlockNotes(collapsedBlock, result.notes);
-            await this.saveAndRender();
+            await this.saveAndRender(!(hadNotes && !result.notes));
 
             return true;
         }
@@ -511,15 +516,22 @@
                     return await this.editBookmarkNotes(bookmark);
                 }
 
+                const existingBlockNotes = this.getBlockNotes(identity.blockKey);
                 const result = await this.showNotesDialog({
                     dialogTitle: this.getString("editBookmarkNotesTitle"),
                     label: this.getString("bookmarkNotes"),
-                    notes: "",
-                    requireText: true
+                    notes: existingBlockNotes,
+                    requireText: !existingBlockNotes
                 });
 
-                if (!result || !result.notes) {
+                if (!result) {
                     return false;
+                }
+
+                if (!result.notes) {
+                    this.setBlockNotes(identity.blockKey, "");
+                    await this.saveAndRender(false);
+                    return true;
                 }
 
                 this.createBookmarkForBlockNote(block, result.notes);
