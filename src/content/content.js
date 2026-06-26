@@ -306,8 +306,8 @@
                 getState: element => this.getHoverToolbarState(element),
                 createIconButton: options => this.createIconButton(options),
                 strings: ViewManagerStrings,
-                onCollapse: element => this.collapseBlock(element),
-                onRestore: element => this.restoreCollapsedBlockForElement(element),
+                onCollapse: (element, trace) => this.collapseBlock(element, trace),
+                onRestore: (element, trace) => this.restoreCollapsedBlockForElement(element, trace),
                 onAddBookmark: element => this.addBookmarkForBlockElement(element),
                 onRemoveBookmark: element => this.removeBookmarkForBlockElement(element),
                 onEditNotes: element => this.editNotesForBlockElement(element)
@@ -317,6 +317,8 @@
         static PANEL_ID = "mrbr-cvm-panel";
         static STORAGE_KEY = "mrbrChatGptViewManagerState";
         static collapsedBlocksManager;
+        /** @type {string} */
+        instanceId = crypto.randomUUID().substring(0, 8);
         /** @type {InstanceType<typeof ViewManagerLocalPersistence> | null} */
         persistence = null;
         /** @type {InstanceType<typeof ViewManagerNotesManager> | null} */
@@ -1296,15 +1298,24 @@
          * Restores the collapsed block represented by a conversation element.
          *
          * @param {HTMLElement} element
+         * @param {any} [trace]
          * @returns {Promise<void>}
          */
-        async restoreCollapsedBlockForElement(element) {
+        async restoreCollapsedBlockForElement(element, trace) {
             if (this.isBatchUpdatingBlocks) {
+                trace?.actual("Restore ignored because a batch operation is active.");
                 return;
             }
 
-            await this.collapsedBlocksManager.restoreCollapsedBlockForElement(element);
+            trace?.functionCalled("MrbrChatGptViewManager.restoreCollapsedBlockForElement", {
+                managerInstanceId: this.instanceId,
+                target: trace.snapshotElement(element)
+            });
+            await this.collapsedBlocksManager.restoreCollapsedBlockForElement(element, trace);
             this.syncStateReferences();
+            trace?.actual("Main state references synchronized after restore.", {
+                collapsedBlockCount: this.state.collapsedBlocks.length
+            });
             this.render();
         }
 
@@ -1332,7 +1343,11 @@
          */
         render() {
             const self = this;
+            const trace = window.MrbrCvm.ViewManagerTrace?.current();
 
+            trace?.functionCalled("MrbrChatGptViewManager.render", {
+                collapsedBlockCount: self.state.collapsedBlocks.length
+            });
             self.scheduleDomUpdate(() => {
                 self.hoverToolbar?.refresh();
 
@@ -1383,6 +1398,9 @@
                     self.createToolbarElement(),
                     listsContainerElement
                 );
+                trace?.actual("View Manager panel render completed.", {
+                    collapsedBlockCount: self.state.collapsedBlocks.length
+                });
             });
         }
         /**
@@ -2247,9 +2265,11 @@
          * @returns {HTMLElement | null}
          */
         findTurnContainer(item) {
-            if (item.turnId) {
+            const turnId = window.MrbrCvm.ViewManagerIdentity.getTurnId(item);
+
+            if (turnId) {
                 const turnContainer = document.querySelector(
-                    `[data-turn-id-container="${CSS.escape(item.turnId)}"]`
+                    `[data-turn-id-container="${CSS.escape(turnId)}"]`
                 );
 
                 if (turnContainer instanceof HTMLElement) {
@@ -2257,12 +2277,14 @@
                 }
 
                 const turnElement = document.querySelector(
-                    `[data-turn-id="${CSS.escape(item.turnId)}"]`
+                    `[data-turn-id="${CSS.escape(turnId)}"]`
                 );
 
                 if (turnElement instanceof HTMLElement) {
                     return turnElement.closest("[data-turn-id-container]") || turnElement;
                 }
+
+                return null;
             }
 
             if (item.blockKey) {
@@ -2481,6 +2503,7 @@
          */
         highlightNotesTarget(block) {
             const identity = this.collapsedBlocksManager.getIdentityForElement(block),
+                ViewManagerIdentity = window.MrbrCvm.ViewManagerIdentity,
                 informationBars = Array.from(document.querySelectorAll(
                     "[data-mrbr-cvm-information-bar]:not([hidden])"
                 )).filter(element => element instanceof HTMLElement),
@@ -2489,12 +2512,10 @@
                         return false;
                     }
 
-                    const blockKey = element.dataset.mrbrCvmBlockKey || "",
-                        turnId = element.dataset.mrbrCvmTurnId || "";
-
-                    return (identity.blockKey && blockKey === identity.blockKey)
-                        || (identity.turnId && turnId === identity.turnId)
-                        || (identity.turnIdContainer && turnId === identity.turnIdContainer);
+                    return ViewManagerIdentity.matches(identity, {
+                        blockKey: element.dataset.mrbrCvmBlockKey || "",
+                        turnId: element.dataset.mrbrCvmTurnId || ""
+                    });
                 }),
                 target = matchingInformationBar instanceof HTMLElement
                     ? matchingInformationBar
@@ -2535,15 +2556,24 @@
         * Collapses a specific conversation block.
         *
         * @param {HTMLElement} block
+        * @param {any} [trace]
         * @returns {Promise<void>}
         */
-        async collapseBlock(block) {
+        async collapseBlock(block, trace) {
             if (this.isBatchUpdatingBlocks) {
+                trace?.actual("Collapse ignored because a batch operation is active.");
                 return;
             }
 
-            await this.collapsedBlocksManager.collapseBlock(block);
+            trace?.functionCalled("MrbrChatGptViewManager.collapseBlock", {
+                managerInstanceId: this.instanceId,
+                target: trace.snapshotElement(block)
+            });
+            await this.collapsedBlocksManager.collapseBlock(block, undefined, trace);
             this.syncStateReferences();
+            trace?.actual("Main state references synchronized after collapse.", {
+                collapsedBlockCount: this.state.collapsedBlocks.length
+            });
             this.render();
         }
         /**
@@ -2608,8 +2638,15 @@
          * @returns {void}
          */
         scheduleMutationRefresh() {
+            const trace = window.MrbrCvm.ViewManagerTrace?.current();
+
+            trace?.functionCalled("MrbrChatGptViewManager.scheduleMutationRefresh", {
+                isBatchUpdatingBlocks: this.isBatchUpdatingBlocks
+            });
+
             if (this.isBatchUpdatingBlocks) {
                 this.hasPendingMutationRefreshAfterBatch = true;
+                trace?.actual("Mutation refresh deferred until batch completion.");
                 return;
             }
 
@@ -2621,7 +2658,19 @@
                 this.scheduleDomUpdate(() => {
                     const blocks = this.scanner.findBlocks();
 
+                    trace?.functionCalled("MutationObserver.refresh.animationFrame", {
+                        scannedBlockCount: blocks.length,
+                        collapsedBlockCount: this.state.collapsedBlocks.length
+                    });
                     this.applyCollapsedBlocks(blocks);
+                    trace?.actual("Persisted collapsed state reapplied after DOM mutation.", {
+                        informationBarCount: document.querySelectorAll(
+                            "[data-mrbr-cvm-information-bar]:not([hidden])"
+                        ).length,
+                        collapsedHostCount: document.querySelectorAll(
+                            "[data-mrbr-cvm-collapsed-host-key]"
+                        ).length
+                    });
                 });
             }, 150);
         }

@@ -10,8 +10,8 @@
         static SELECTOR = "[data-mrbr-cvm-information-bar]";
         static TEMPLATE = `
             <div class="mrbr-cvm-information-bar" data-mrbr-cvm-information-bar hidden>
-                <span class="mrbr-cvm-information-bar-status" data-mrbr-cvm-information-bar-status></span>
                 <span class="mrbr-cvm-information-bar-participant" data-mrbr-cvm-information-bar-participant></span>
+                <span class="mrbr-cvm-information-bar-status" data-mrbr-cvm-information-bar-status></span>
                 <span class="mrbr-cvm-information-bar-note" data-mrbr-cvm-information-bar-note hidden></span>
                 <span class="mrbr-cvm-information-bar-title" data-mrbr-cvm-information-bar-title></span>
             </div>`;

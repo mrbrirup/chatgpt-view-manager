@@ -278,25 +278,62 @@
          *
          * @param {HTMLElement} element
          * @param {string} [title]
+         * @param {any} [trace]
          * @returns {Promise<any | null>}
          */
-        async collapseBlock(element, title) {
+        async collapseBlock(element, title, trace) {
             if (!this.persistence) {
                 console.warn("CollapsedBlocksManager: persistence is not available.");
                 return null;
             }
 
+            trace?.functionCalled("CollapsedBlocksManager.collapseBlock", {
+                targetBeforeStateChange: trace.snapshotElement(element),
+                collapsedBlockCountBefore: this.collapsedBlocks.length
+            });
             const collapsedBlock = this.createOrUpdateCollapsedBlock(element, title);
 
             if (!collapsedBlock) {
+                trace?.actual("No collapsed-block record could be created.");
                 alert(this.getString("selectedBlockInvalidKey"));
                 return null;
             }
 
-            await this.persistence.saveState();
+            trace?.actual("Collapsed-block state record created or found.", {
+                collapsedBlock,
+                collapsedBlockCount: this.collapsedBlocks.length
+            });
+            trace?.expect("The live target should gain is-shrunk and an InformationBar in the next animation frame.");
 
-            this.scheduleDomUpdate(() => {
-                this.applyCollapsedBlockToElement(this.getCollapseHostElement(element), collapsedBlock);
+            await this.runOnAnimationFrame(() => {
+                const liveElement = this.findElementForCollapsedBlock(collapsedBlock)
+                    || (element.isConnected ? element : null);
+
+                trace?.functionCalled("CollapsedBlocksManager.collapseBlock.animationFrame", {
+                    originalTarget: trace.snapshotElement(element),
+                    resolvedLiveTarget: trace.snapshotElement(liveElement)
+                });
+
+                if (liveElement) {
+                    this.applyCollapsedBlockToElement(
+                        this.getCollapseHostElement(liveElement),
+                        collapsedBlock
+                    );
+                }
+
+                trace?.actual("DOM immediately after collapse frame.", {
+                    resolvedLiveTarget: trace.snapshotElement(liveElement)
+                });
+            });
+
+            trace?.functionCalled("ViewManagerLocalPersistence.saveState", {
+                mergeFromStorage: true,
+                collapsedBlockCount: this.collapsedBlocks.length
+            });
+            await this.persistence.saveState();
+            trace?.actual("Persistence completed after collapse.", {
+                collapsedBlockCount: this.persistence.state?.collapsedBlocks?.length,
+                liveTarget: trace.snapshotElement(this.findElementForCollapsedBlock(collapsedBlock))
             });
 
             return collapsedBlock;
@@ -410,6 +447,25 @@
         }
 
         /**
+         * Runs a DOM operation in the next animation frame and waits for completion.
+         *
+         * @param {() => void} callback
+         * @returns {Promise<void>}
+         */
+        runOnAnimationFrame(callback) {
+            return new Promise((resolve, reject) => {
+                window.requestAnimationFrame(() => {
+                    try {
+                        callback();
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            });
+        }
+
+        /**
          * Expands a cached snapshot of conversation blocks over multiple frames.
          *
          * @param {HTMLElement[]} blocks
@@ -440,10 +496,10 @@
          * @returns {any | null}
          */
         findCollapsedBlockByIdentity(identity) {
+            const ViewManagerIdentity = window.MrbrCvm.ViewManagerIdentity;
+
             return this.collapsedBlocks.find(item => {
-                return (identity.blockKey && item.blockKey === identity.blockKey)
-                    || (identity.turnId && (item.turnId === identity.turnId || item.turnIdContainer === identity.turnId))
-                    || (identity.contentHash && item.contentHash === identity.contentHash);
+                return ViewManagerIdentity.matches(identity, item);
             }) || null;
         }
 
@@ -520,41 +576,85 @@
 
         /**
          * @param {HTMLElement} element
+         * @param {any} [trace]
          * @returns {Promise<void>}
          */
-        async restoreCollapsedBlockForElement(element) {
+        async restoreCollapsedBlockForElement(element, trace) {
+            trace?.functionCalled("CollapsedBlocksManager.restoreCollapsedBlockForElement", {
+                target: trace.snapshotElement(element),
+                collapsedBlockCountBefore: this.collapsedBlocks.length
+            });
             const identity = this.getIdentityForElement(element),
                 collapsedBlock = this.findCollapsedBlockByIdentity(identity);
 
             if (!collapsedBlock) {
-                this.restoreCollapsedBlockDomOnlyForElement(element);
+                trace?.actual("No persisted collapsed-block record matched; applying DOM-only restore.", {
+                    identity
+                });
+                await this.runOnAnimationFrame(() => {
+                    if (element.isConnected) {
+                        this.restoreCollapsedBlockDomOnlyForElement(element);
+                    }
+                    trace?.actual("DOM after recordless restore frame.", {
+                        target: trace.snapshotElement(element)
+                    });
+                });
                 return;
             }
 
-            await this.restoreCollapsedBlock(collapsedBlock);
+            trace?.actual("Matched collapsed-block record for restore.", {
+                identity,
+                collapsedBlock
+            });
+            await this.restoreCollapsedBlock(collapsedBlock, trace);
         }
 
         /**
          * @param {any} collapsedBlock
+         * @param {any} [trace]
          * @returns {Promise<void>}
          */
-        async restoreCollapsedBlock(collapsedBlock) {
+        async restoreCollapsedBlock(collapsedBlock, trace) {
             if (!this.persistence) {
                 return;
             }
 
+            trace?.functionCalled("CollapsedBlocksManager.restoreCollapsedBlock", {
+                collapsedBlock,
+                collapsedBlockCountBefore: this.collapsedBlocks.length
+            });
             this.state.collapsedBlocks = this.collapsedBlocks.filter(item => {
                 return !this.areSameCollapsedBlock(item, collapsedBlock);
             });
+            trace?.actual("Collapsed-block state record removed locally.", {
+                collapsedBlockCount: this.state.collapsedBlocks.length
+            });
+            trace?.expect("The live target should lose is-shrunk and hide its InformationBar in the next animation frame.");
 
-            await this.persistence.saveState(this.state, { mergeFromStorage: false });
-
-            this.scheduleDomUpdate(() => {
+            await this.runOnAnimationFrame(() => {
                 const element = this.findElementForCollapsedBlock(collapsedBlock);
+
+                trace?.functionCalled("CollapsedBlocksManager.restoreCollapsedBlock.animationFrame", {
+                    resolvedLiveTarget: trace.snapshotElement(element)
+                });
 
                 if (element) {
                     this.restoreCollapsedBlockDomOnlyForElement(element);
                 }
+
+                trace?.actual("DOM immediately after restore frame.", {
+                    resolvedLiveTarget: trace.snapshotElement(element)
+                });
+            });
+
+            trace?.functionCalled("ViewManagerLocalPersistence.saveState", {
+                mergeFromStorage: false,
+                collapsedBlockCount: this.state.collapsedBlocks.length
+            });
+            await this.persistence.saveState(this.state, { mergeFromStorage: false });
+            trace?.actual("Persistence completed after restore.", {
+                collapsedBlockCount: this.persistence.state?.collapsedBlocks?.length,
+                liveTarget: trace.snapshotElement(this.findElementForCollapsedBlock(collapsedBlock))
             });
         }
 
@@ -605,10 +705,7 @@
          * @returns {boolean}
          */
         areSameCollapsedBlock(left, right) {
-            return (left.blockKey && right.blockKey && left.blockKey === right.blockKey)
-                || (left.turnId && right.turnId && left.turnId === right.turnId)
-                || (left.turnIdContainer && right.turnIdContainer && left.turnIdContainer === right.turnIdContainer)
-                || (left.contentHash && right.contentHash && left.contentHash === right.contentHash);
+            return window.MrbrCvm.ViewManagerIdentity.matches(left, right);
         }
 
         /**
@@ -622,13 +719,19 @@
                 return;
             }
 
-            const currentBlocks = blocks || this.scanner.findBlocks();
+            const currentBlocks = blocks || this.scanner.findBlocks(),
+                trace = window.MrbrCvm.ViewManagerTrace?.current();
+
+            trace?.functionCalled("CollapsedBlocksManager.applyPersistedCollapsedBlocks", {
+                scannedBlockCount: currentBlocks.length,
+                collapsedBlockCount: this.collapsedBlocks.length
+            });
 
             this.removeOrphanedCollapsedDomState();
 
             this.collapsedBlocks.forEach(collapsedBlock => {
-                const block = this.scanner.findBlockForBookmark(collapsedBlock)
-                    || this.findTurnContainer(collapsedBlock);
+                const block = this.findTurnContainer(collapsedBlock)
+                    || this.scanner.findBlockForBookmark(collapsedBlock);
 
                 if (!block) {
                     return;
@@ -641,6 +744,15 @@
                 }
 
                 this.applyCollapsedBlockToElement(host, collapsedBlock);
+            });
+
+            trace?.actual("applyPersistedCollapsedBlocks completed.", {
+                collapsedHostCount: document.querySelectorAll(
+                    "[data-mrbr-cvm-collapsed-host-key]"
+                ).length,
+                informationBarCount: document.querySelectorAll(
+                    "[data-mrbr-cvm-information-bar]:not([hidden])"
+                ).length
             });
         }
 
@@ -661,7 +773,11 @@
                 const key = element.getAttribute(CollapsedBlocksManager.COLLAPSED_HOST_ATTRIBUTE),
                     turnId = element.getAttribute("data-mrbr-cvm-collapsed-host-turn-id");
 
-                if ((key && activeKeys.has(key)) || (turnId && activeTurnIds.has(turnId))) {
+                const isActive = turnId
+                    ? activeTurnIds.has(turnId)
+                    : Boolean(key && activeKeys.has(key));
+
+                if (isActive) {
                     return;
                 }
 
@@ -686,6 +802,7 @@
          * @returns {HTMLElement | null}
          */
         findInformationBarForCollapsedBlock(collapsedBlock) {
+            const ViewManagerIdentity = window.MrbrCvm.ViewManagerIdentity;
             const informationBars = document.querySelectorAll(
                 "[data-mrbr-cvm-information-bar]:not([hidden])"
             );
@@ -695,14 +812,10 @@
                     continue;
                 }
 
-                const blockKey = element.dataset.mrbrCvmBlockKey || "",
-                    turnId = element.dataset.mrbrCvmTurnId || "";
-
-                if (
-                    (collapsedBlock.blockKey && blockKey === collapsedBlock.blockKey)
-                    || (collapsedBlock.turnId && turnId === collapsedBlock.turnId)
-                    || (collapsedBlock.turnIdContainer && turnId === collapsedBlock.turnIdContainer)
-                ) {
+                if (ViewManagerIdentity.matches({
+                    blockKey: element.dataset.mrbrCvmBlockKey || "",
+                    turnId: element.dataset.mrbrCvmTurnId || ""
+                }, collapsedBlock)) {
                     return element;
                 }
             }
@@ -733,6 +846,8 @@
                 if (turnElement instanceof HTMLElement) {
                     return turnElement.closest("[data-turn-id-container]") || turnElement;
                 }
+
+                return null;
             }
 
             if (item.blockKey) {

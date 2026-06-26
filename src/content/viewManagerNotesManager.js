@@ -423,11 +423,7 @@
          * @returns {boolean}
          */
         identityMatches(identity, item) {
-            return (identity.blockKey && item.blockKey === identity.blockKey)
-                || (identity.turnId && (item.turnId === identity.turnId || item.turnIdContainer === identity.turnId))
-                || (identity.turnIdContainer && (item.turnId === identity.turnIdContainer || item.turnIdContainer === identity.turnIdContainer))
-                || (identity.contentHash && item.contentHash === identity.contentHash)
-                || (identity.role && typeof identity.blockIndex === "number" && item.role === identity.role && item.blockIndex === identity.blockIndex);
+            return window.MrbrCvm.ViewManagerIdentity.matches(identity, item);
         }
 
         /**

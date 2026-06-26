@@ -16,6 +16,8 @@
       ],
       "js": [
         "src/content/draw.js",
+        "src/content/viewManagerTrace.js",
+        "src/content/viewManagerIdentity.js",
         "src/content/animationFrameBatchProcessor.js",
         "src/content/conversationScanner.js",
         "src/content/viewManagerStrings.js",

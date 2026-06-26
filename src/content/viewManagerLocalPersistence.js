@@ -485,10 +485,10 @@
          * @returns {string}
          */
         getCollapsedBlockMergeKey(collapsedBlock) {
-            return collapsedBlock.blockKey
-                || collapsedBlock.contentHash
-                || collapsedBlock.turnId
+            return collapsedBlock.turnId
                 || collapsedBlock.turnIdContainer
+                || collapsedBlock.blockKey
+                || collapsedBlock.contentHash
                 || `${collapsedBlock.role || "unknown"}:${collapsedBlock.blockIndex ?? ""}`;
         }
 

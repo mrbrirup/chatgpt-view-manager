@@ -255,52 +255,29 @@
          * @returns {HTMLElement | null}
          */
         findBlockForBookmark(bookmark) {
-            const blocks = this.findBlocks();
-            if (bookmark.turnId) {
+            const blocks = this.findBlocks(),
+                ViewManagerIdentity = window.MrbrCvm.ViewManagerIdentity;
+
+            const bookmarkTurnId = ViewManagerIdentity.getTurnId(bookmark);
+
+            if (bookmarkTurnId) {
                 const turnIdMatch = blocks.find(block => {
-                    return block.dataset.turnId === bookmark.turnId
-                        || block.dataset.turnIdContainer === bookmark.turnId
-                        || block.closest("[data-turn-id]")?.getAttribute("data-turn-id") === bookmark.turnId
-                        || block.closest("[data-turn-id-container]")?.getAttribute("data-turn-id-container") === bookmark.turnId;
+                    return block.dataset.turnId === bookmarkTurnId
+                        || block.dataset.turnIdContainer === bookmarkTurnId
+                        || block.closest("[data-turn-id]")?.getAttribute("data-turn-id") === bookmarkTurnId
+                        || block.closest("[data-turn-id-container]")?.getAttribute("data-turn-id-container") === bookmarkTurnId;
                 });
 
                 if (turnIdMatch) {
                     return turnIdMatch;
                 }
+
+                return null;
             }
 
-            if (bookmark.blockKey) {
-                const keyMatch = blocks.find(block => {
-                    return block.dataset.mrbrCvmBlockKey === bookmark.blockKey;
-                });
-
-                if (keyMatch) {
-                    return keyMatch;
-                }
-            }
-
-            if (bookmark.contentHash) {
-                const hashMatch = blocks.find(block => {
-                    return block.dataset.mrbrCvmBlockHash === bookmark.contentHash;
-                });
-
-                if (hashMatch) {
-                    return hashMatch;
-                }
-            }
-
-            if (bookmark.role && typeof bookmark.blockIndex === "number") {
-                const roleIndexMatch = blocks.find(block => {
-                    return block.dataset.mrbrCvmBlockRole === bookmark.role
-                        && Number(block.dataset.mrbrCvmBlockIndex || "-1") === bookmark.blockIndex;
-                });
-
-                if (roleIndexMatch) {
-                    return roleIndexMatch;
-                }
-            }
-
-            return null;
+            return blocks.find(block => {
+                return ViewManagerIdentity.matches(this.getBlockIdentity(block), bookmark);
+            }) || null;
         }
 
         /**

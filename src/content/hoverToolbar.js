@@ -29,8 +29,8 @@
          *     },
          *     createIconButton: (options: any) => HTMLButtonElement,
          *     strings?: { get: (key: string) => string },
-         *     onCollapse: (element: HTMLElement) => void | Promise<void>,
-         *     onRestore: (element: HTMLElement) => void | Promise<void>,
+         *     onCollapse: (element: HTMLElement, trace?: any) => void | Promise<void>,
+         *     onRestore: (element: HTMLElement, trace?: any) => void | Promise<void>,
          *     onAddBookmark: (element: HTMLElement) => void | Promise<void>,
          *     onRemoveBookmark: (element: HTMLElement) => void | Promise<void>,
          *     onEditNotes: (element: HTMLElement) => void | Promise<void>
@@ -52,16 +52,23 @@
             this.onAddBookmark = options.onAddBookmark;
             this.onRemoveBookmark = options.onRemoveBookmark;
             this.onEditNotes = options.onEditNotes;
+            this.instanceId = crypto.randomUUID().substring(0, 8);
 
             /** @type {HTMLElement | null} */
             this.element = null;
             /** @type {HTMLElement | null} */
             this.targetElement = null;
+            /** @type {HTMLElement | null} */
+            this.renderedTargetElement = null;
+            /** @type {string} */
+            this.renderedStateSignature = "";
             /** @type {MouseEvent | null} */
             this.lastPointerEvent = null;
             this.isMinimised = false;
+            this.isActionPending = false;
             this.hideTimeoutId = 0;
             this.positionAnimationFrameId = 0;
+            this.pointerReconcileAnimationFrameId = 0;
             this.isWired = false;
 
             this.boundMouseOver = event => this.handleMouseOver(event);
@@ -111,9 +118,15 @@
                 window.cancelAnimationFrame(this.positionAnimationFrameId);
             }
 
+            if (this.pointerReconcileAnimationFrameId) {
+                window.cancelAnimationFrame(this.pointerReconcileAnimationFrameId);
+            }
+
             this.element?.remove();
             this.element = null;
             this.targetElement = null;
+            this.renderedTargetElement = null;
+            this.renderedStateSignature = "";
             this.isWired = false;
         }
 
@@ -211,12 +224,102 @@
          * @returns {void}
          */
         handleMouseMove(event) {
-            if (!this.targetElement || this.element?.hidden) {
+            this.lastPointerEvent = event;
+            this.schedulePointerReconciliation();
+        }
+
+        /**
+         * Reconciles the toolbar target at most once per animation frame.
+         *
+         * @returns {void}
+         */
+        schedulePointerReconciliation() {
+            if (this.pointerReconcileAnimationFrameId) {
                 return;
             }
 
-            this.lastPointerEvent = event;
+            this.pointerReconcileAnimationFrameId = window.requestAnimationFrame(() => {
+                this.pointerReconcileAnimationFrameId = 0;
+                this.reconcileTargetFromPointer();
+            });
+        }
+
+        /**
+         * Re-evaluates the live block beneath the last pointer position.
+         *
+         * @returns {void}
+         */
+        reconcileTargetFromPointer() {
+            const pointer = this.lastPointerEvent;
+
+            if (!pointer) {
+                return;
+            }
+
+            const source = this.getElementFromPointBelowToolbar(
+                    pointer.clientX,
+                    pointer.clientY
+                ),
+                target = source instanceof HTMLElement
+                    ? this.getTargetElement(source)
+                    : null;
+
+            if (target?.closest(".mrbr-cvm-panel")) {
+                this.scheduleHide();
+                return;
+            }
+
+            if (!target) {
+                const directHit = document.elementFromPoint(pointer.clientX, pointer.clientY);
+
+                if (directHit instanceof Node && this.element?.contains(directHit)) {
+                    this.render();
+                    this.show();
+                    this.schedulePosition();
+                    return;
+                }
+
+                this.scheduleHide();
+                return;
+            }
+
+            window.clearTimeout(this.hideTimeoutId);
+
+            if (this.targetElement !== target) {
+                this.targetElement?.classList.remove("mrbr-cvm-hover-toolbar-target");
+                this.targetElement = target;
+                target.classList.add("mrbr-cvm-hover-toolbar-target");
+            }
+
+            this.render();
+            this.show();
             this.schedulePosition();
+        }
+
+        /**
+         * Gets the live element under the pointer, looking through the toolbar itself.
+         *
+         * @param {number} clientX
+         * @param {number} clientY
+         * @returns {Element | null}
+         */
+        getElementFromPointBelowToolbar(clientX, clientY) {
+            const directHit = document.elementFromPoint(clientX, clientY),
+                toolbar = this.element;
+
+            if (!toolbar || !(directHit instanceof Node) || !toolbar.contains(directHit)) {
+                return directHit;
+            }
+
+            const previousPointerEvents = toolbar.style.pointerEvents;
+
+            toolbar.style.pointerEvents = "none";
+
+            try {
+                return document.elementFromPoint(clientX, clientY);
+            } finally {
+                toolbar.style.pointerEvents = previousPointerEvents;
+            }
         }
 
         /**
@@ -244,6 +347,8 @@
 
             this.targetElement?.classList.remove("mrbr-cvm-hover-toolbar-target");
             this.targetElement = null;
+            this.renderedTargetElement = null;
+            this.renderedStateSignature = "";
         }
 
         /**
@@ -251,7 +356,7 @@
          *
          * @returns {void}
          */
-        render() {
+        render(force = false) {
             if (!this.targetElement) {
                 return;
             }
@@ -260,16 +365,40 @@
                 actions = element.querySelector("[data-mrbr-cvm-hover-toolbar-actions]"),
                 minimise = element.querySelector("[data-mrbr-cvm-hover-toolbar-minimise]"),
                 targetElement = this.targetElement,
-                state = this.getState(targetElement);
+                state = this.getState(targetElement),
+                stateSignature = this.createStateSignature(state);
 
             if (!(actions instanceof HTMLElement) || !(minimise instanceof HTMLElement)) {
                 return;
             }
 
+            if (
+                !force
+                && this.renderedTargetElement === targetElement
+                && this.renderedStateSignature === stateSignature
+            ) {
+                this.updateActionDisabledState();
+                return;
+            }
+
             actions.replaceChildren(
                 state.isCollapsed
-                    ? this.createActionButton("restore", "restoreBlock", () => this.onRestore(targetElement))
-                    : this.createActionButton("collapse", "collapseBlock", () => this.onCollapse(targetElement)),
+                    ? this.createActionButton(
+                        "restore",
+                        "restoreBlock",
+                        trace => this.onRestore(targetElement, trace),
+                        false,
+                        "",
+                        "expand"
+                    )
+                    : this.createActionButton(
+                        "collapse",
+                        "collapseBlock",
+                        trace => this.onCollapse(targetElement, trace),
+                        false,
+                        "",
+                        "collapse"
+                    ),
                 state.isBookmarked
                     ? this.createActionButton("bookmark", "removeBookmark", () => this.onRemoveBookmark(targetElement), true)
                     : this.createActionButton("bookmark", "addBookmark", () => this.onAddBookmark(targetElement)),
@@ -294,17 +423,36 @@
             ));
 
             element.classList.toggle("mrbr-cvm-hover-toolbar-minimised", this.isMinimised);
+            this.renderedTargetElement = targetElement;
+            this.renderedStateSignature = stateSignature;
+            this.updateActionDisabledState();
+        }
+
+        /**
+         * Creates a compact signature for the state that changes toolbar controls.
+         *
+         * @param {{ isCollapsed?: boolean, isBookmarked?: boolean, hasNotes?: boolean }} state
+         * @returns {string}
+         */
+        createStateSignature(state) {
+            return [
+                state.isCollapsed === true ? "1" : "0",
+                state.isBookmarked === true ? "1" : "0",
+                state.hasNotes === true ? "1" : "0",
+                this.isMinimised ? "1" : "0"
+            ].join("");
         }
 
         /**
          * @param {string} iconName
          * @param {string} stringKey
-         * @param {() => void | Promise<void>} action
+         * @param {(trace?: any) => void | Promise<void>} action
          * @param {boolean} [isActive]
          * @param {string} [className]
+         * @param {string} [traceAction]
          * @returns {HTMLButtonElement}
          */
-        createActionButton(iconName, stringKey, action, isActive = false, className = "") {
+        createActionButton(iconName, stringKey, action, isActive = false, className = "", traceAction = "") {
             const button = this.createIconButton({
                 iconName,
                 title: this.getString(stringKey),
@@ -312,14 +460,41 @@
                     event.preventDefault();
                     event.stopPropagation();
 
-                    Promise.resolve(action()).then(() => {
-                        if (this.targetElement) {
-                            this.render();
-                            this.show();
-                            this.schedulePosition();
-                        }
-                    }).catch(error => {
+                    if (this.isActionPending) {
+                        return;
+                    }
+
+                    this.isActionPending = true;
+                    this.updateActionDisabledState();
+
+                    const trace = traceAction
+                        ? window.MrbrCvm.ViewManagerTrace?.begin(traceAction, this.targetElement)
+                        : null;
+
+                    trace?.functionCalled("HoverToolbar.createActionButton.onClick", {
+                        stringKey,
+                        hoverToolbarInstanceId: this.instanceId,
+                        hoverToolbarElementCount: document.querySelectorAll(
+                            "[data-mrbr-cvm-hover-toolbar]"
+                        ).length,
+                        panelElementCount: document.querySelectorAll("#mrbr-cvm-panel").length,
+                        target: trace.snapshotElement(this.targetElement)
+                    });
+                    trace?.expect(`${traceAction} should update this target once.`);
+
+                    Promise.resolve(action(trace)).catch(error => {
+                        trace?.error(error);
                         console.error(`HoverToolbar action failed: ${stringKey}`, error);
+                    }).finally(() => {
+                        this.isActionPending = false;
+
+                        window.requestAnimationFrame(() => {
+                            this.reconcileTargetFromPointer();
+                            trace?.actual("Pointer target after action reconciliation.", {
+                                target: trace.snapshotElement(this.targetElement)
+                            });
+                            trace?.finishAfter(500);
+                        });
                     });
                 }
             });
@@ -346,9 +521,35 @@
         }
 
         /**
+         * Prevents contradictory toolbar actions while one async operation is pending.
+         *
+         * @returns {void}
+         */
+        updateActionDisabledState() {
+            const element = this.element;
+
+            if (!element) {
+                return;
+            }
+
+            element.classList.toggle("mrbr-cvm-hover-toolbar-busy", this.isActionPending);
+            element.setAttribute("aria-busy", this.isActionPending ? "true" : "false");
+            element.querySelectorAll("button").forEach(button => {
+                if (button instanceof HTMLButtonElement) {
+                    button.disabled = this.isActionPending;
+                }
+            });
+        }
+
+        /**
          * @returns {void}
          */
         refresh() {
+            if (this.lastPointerEvent) {
+                this.schedulePointerReconciliation();
+                return;
+            }
+
             if (this.targetElement) {
                 this.render();
             }

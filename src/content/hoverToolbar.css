@@ -55,6 +55,15 @@
     background: var(--mrbr-cvm-button-hover-background);
 }
 
+.mrbr-cvm-hover-toolbar-busy {
+    cursor: wait;
+}
+
+.mrbr-cvm-hover-toolbar-busy .mrbr-cvm-hover-toolbar-button:disabled {
+    cursor: wait;
+    opacity: 0.55;
+}
+
 .mrbr-cvm-hover-toolbar-button-active {
     color: var(--mrbr-cvm-hover-toolbar-active) !important;
     border-color: var(--mrbr-cvm-hover-toolbar-active) !important;
