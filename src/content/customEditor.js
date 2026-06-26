@@ -4,9 +4,9 @@
     window.MrbrCvm = window.MrbrCvm || {};
 
     /**
-     * Minimal dialog-based prompt editor. The dialog stays in the extension's
-     * isolated world; ProseMirror updates are delegated to a tiny page-world
-     * bridge because ChatGPT's EditorView is owned by the webpage.
+     * Floating custom prompt editor. The editor UI stays in the extension's
+     * isolated world; prompt updates are delegated to a page-world bridge because
+     * ChatGPT's composer belongs to the webpage.
      */
     class CustomEditor {
         static BRIDGE_SCRIPT_ID = "mrbr-cvm-custom-editor-main-world-bridge-v3";
@@ -14,18 +14,32 @@
         static RESPONSE_TYPE = "mrbr-cvm-custom-editor-response-v3";
         static SOURCE = "mrbr-cvm-custom-editor-v3";
         static LAST_RESULT_ELEMENT_ID = "mrbr-cvm-custom-editor-last-result";
+        static GEOMETRY_STORAGE_KEY = "mrbrCvmCustomPromptDialogGeometry";
+        static DEFAULT_WIDTH = 640;
+        static DEFAULT_HEIGHT = 480;
+        static MIN_WIDTH = 360;
+        static MIN_HEIGHT = 260;
+        static VIEWPORT_MARGIN = 12;
         static TEMPLATE = `
-            <div class="mrbr-cvm-dialog-backdrop mrbr-cvm-custom-editor-backdrop">
-                <div class="mrbr-cvm-dialog mrbr-cvm-custom-editor-dialog" role="dialog" aria-modal="true">
-                    <div class="mrbr-cvm-custom-editor-header">
-                        <h3 class="mrbr-cvm-dialog-title" data-mrbr-cvm-custom-editor-title></h3>
-                        <div class="mrbr-cvm-custom-editor-toolbar" data-mrbr-cvm-custom-editor-toolbar></div>
-                    </div>
+            <div class="mrbr-cvm-custom-editor-window" role="dialog" aria-modal="false">
+                <div class="mrbr-cvm-custom-editor-titlebar" data-mrbr-cvm-custom-editor-drag-handle>
+                    <h3 class="mrbr-cvm-dialog-title" data-mrbr-cvm-custom-editor-title></h3>
+                    <div class="mrbr-cvm-custom-editor-titlebar-actions" data-mrbr-cvm-custom-editor-titlebar-actions></div>
+                </div>
+                <div class="mrbr-cvm-custom-editor-body">
                     <label class="mrbr-cvm-dialog-label" data-mrbr-cvm-custom-editor-label></label>
                     <textarea class="mrbr-cvm-dialog-textarea mrbr-cvm-custom-editor-textarea" data-mrbr-cvm-custom-editor-textarea></textarea>
                     <div class="mrbr-cvm-custom-editor-status" data-mrbr-cvm-custom-editor-status aria-live="polite"></div>
-                    <div class="mrbr-cvm-dialog-actions mrbr-cvm-custom-editor-actions" data-mrbr-cvm-custom-editor-actions></div>
                 </div>
+                <div class="mrbr-cvm-dialog-actions mrbr-cvm-custom-editor-actions" data-mrbr-cvm-custom-editor-actions></div>
+                <div class="mrbr-cvm-custom-editor-resize-handle mrbr-cvm-custom-editor-resize-n" data-mrbr-cvm-custom-editor-resize="n"></div>
+                <div class="mrbr-cvm-custom-editor-resize-handle mrbr-cvm-custom-editor-resize-e" data-mrbr-cvm-custom-editor-resize="e"></div>
+                <div class="mrbr-cvm-custom-editor-resize-handle mrbr-cvm-custom-editor-resize-s" data-mrbr-cvm-custom-editor-resize="s"></div>
+                <div class="mrbr-cvm-custom-editor-resize-handle mrbr-cvm-custom-editor-resize-w" data-mrbr-cvm-custom-editor-resize="w"></div>
+                <div class="mrbr-cvm-custom-editor-resize-handle mrbr-cvm-custom-editor-resize-ne" data-mrbr-cvm-custom-editor-resize="ne"></div>
+                <div class="mrbr-cvm-custom-editor-resize-handle mrbr-cvm-custom-editor-resize-se" data-mrbr-cvm-custom-editor-resize="se"></div>
+                <div class="mrbr-cvm-custom-editor-resize-handle mrbr-cvm-custom-editor-resize-sw" data-mrbr-cvm-custom-editor-resize="sw"></div>
+                <div class="mrbr-cvm-custom-editor-resize-handle mrbr-cvm-custom-editor-resize-nw" data-mrbr-cvm-custom-editor-resize="nw"></div>
             </div>`;
 
         /**
@@ -38,12 +52,18 @@
             this.createIconButton = options.createIconButton;
             this.strings = options.strings;
             this.bridgeReadyPromise = null;
-            this.backdropElement = null;
             this.dialogElement = null;
             this.textareaElement = null;
             this.statusElement = null;
-            this.expandButton = null;
-            this.isExpanded = false;
+            this.maximiseButton = null;
+            this.draftText = "";
+            this.draftPageKey = this.getPageKey();
+            this.geometry = null;
+            this.restoreGeometry = null;
+            this.isMaximised = false;
+            this.isPointerInteractionActive = false;
+            this.pageKeyMonitorIntervalId = 0;
+            this.boundWindowResize = () => this.handleWindowResize();
         }
 
         /**
@@ -52,6 +72,179 @@
          */
         getString(key) {
             return this.strings.get(key);
+        }
+
+        /**
+         * @returns {string}
+         */
+        getPageKey() {
+            return `${window.location.origin}${window.location.pathname}`;
+        }
+
+        /**
+         * Keeps the page-lifetime draft scoped to the current ChatGPT page URL.
+         *
+         * @returns {boolean} True when the draft was cleared because the page changed.
+         */
+        syncDraftToCurrentPage() {
+            const pageKey = this.getPageKey();
+
+            if (this.draftPageKey === pageKey) {
+                return false;
+            }
+
+            this.draftPageKey = pageKey;
+            this.draftText = "";
+
+            if (this.textareaElement) {
+                this.textareaElement.value = "";
+            }
+
+            return true;
+        }
+
+        /**
+         * @returns {void}
+         */
+        startPageKeyMonitor() {
+            this.stopPageKeyMonitor();
+            this.pageKeyMonitorIntervalId = window.setInterval(() => {
+                if (!this.dialogElement?.isConnected) {
+                    this.stopPageKeyMonitor();
+                    return;
+                }
+
+                if (this.syncDraftToCurrentPage()) {
+                    this.flashEditableArea();
+                    this.setStatus(this.getString("customEditorClearedForPageChange"));
+                }
+            }, 500);
+        }
+
+        /**
+         * @returns {void}
+         */
+        stopPageKeyMonitor() {
+            if (!this.pageKeyMonitorIntervalId) {
+                return;
+            }
+
+            window.clearInterval(this.pageKeyMonitorIntervalId);
+            this.pageKeyMonitorIntervalId = 0;
+        }
+
+        /**
+         * @param {unknown} value
+         * @returns {{ left: number, top: number, width: number, height: number } | null}
+         */
+        normalizeGeometry(value) {
+            if (!value || typeof value !== "object") {
+                return null;
+            }
+
+            const geometry = {
+                left: Number(value.left),
+                top: Number(value.top),
+                width: Number(value.width),
+                height: Number(value.height)
+            };
+
+            return Object.values(geometry).every(Number.isFinite)
+                ? this.clampGeometry(geometry)
+                : null;
+        }
+
+        /**
+         * @returns {{ left: number, top: number, width: number, height: number }}
+         */
+        createDefaultGeometry() {
+            const width = Math.min(CustomEditor.DEFAULT_WIDTH, window.innerWidth - (CustomEditor.VIEWPORT_MARGIN * 2)),
+                height = Math.min(CustomEditor.DEFAULT_HEIGHT, window.innerHeight - (CustomEditor.VIEWPORT_MARGIN * 2));
+
+            return this.clampGeometry({
+                width,
+                height,
+                left: window.innerWidth - width - 24,
+                top: window.innerHeight - height - 140
+            });
+        }
+
+        /**
+         * @param {{ left: number, top: number, width: number, height: number }} geometry
+         * @returns {{ left: number, top: number, width: number, height: number }}
+         */
+        clampGeometry(geometry) {
+            const margin = CustomEditor.VIEWPORT_MARGIN,
+                maxWidth = Math.max(CustomEditor.MIN_WIDTH, window.innerWidth - (margin * 2)),
+                maxHeight = Math.max(CustomEditor.MIN_HEIGHT, window.innerHeight - (margin * 2)),
+                width = Math.min(Math.max(geometry.width, CustomEditor.MIN_WIDTH), maxWidth),
+                height = Math.min(Math.max(geometry.height, CustomEditor.MIN_HEIGHT), maxHeight),
+                left = Math.min(
+                    Math.max(geometry.left, margin),
+                    Math.max(margin, window.innerWidth - width - margin)
+                ),
+                top = Math.min(
+                    Math.max(geometry.top, margin),
+                    Math.max(margin, window.innerHeight - height - margin)
+                );
+
+            return {
+                left: Math.round(left),
+                top: Math.round(top),
+                width: Math.round(width),
+                height: Math.round(height)
+            };
+        }
+
+        /**
+         * @returns {Promise<{ left: number, top: number, width: number, height: number }>}
+         */
+        async loadGeometry() {
+            try {
+                const result = await chrome.storage.local.get(CustomEditor.GEOMETRY_STORAGE_KEY),
+                    savedGeometry = this.normalizeGeometry(result[CustomEditor.GEOMETRY_STORAGE_KEY]);
+
+                return savedGeometry || this.createDefaultGeometry();
+            } catch {
+                return this.createDefaultGeometry();
+            }
+        }
+
+        /**
+         * @returns {Promise<void>}
+         */
+        async saveGeometry() {
+            if (!this.geometry || this.isMaximised) {
+                return;
+            }
+
+            try {
+                await chrome.storage.local.set({
+                    [CustomEditor.GEOMETRY_STORAGE_KEY]: this.geometry
+                });
+            } catch {
+                // Persistence is helpful, but the editor should keep working if
+                // Chrome storage is temporarily unavailable.
+            }
+        }
+
+        /**
+         * @param {{ left: number, top: number, width: number, height: number }} geometry
+         * @returns {void}
+         */
+        applyGeometry(geometry) {
+            const clampedGeometry = this.clampGeometry(geometry);
+
+            this.geometry = clampedGeometry;
+
+            if (!this.dialogElement) {
+                return;
+            }
+
+            this.dialogElement.style.left = `${clampedGeometry.left}px`;
+            this.dialogElement.style.top = `${clampedGeometry.top}px`;
+            this.dialogElement.style.width = `${clampedGeometry.width}px`;
+            this.dialogElement.style.height = `${clampedGeometry.height}px`;
         }
 
         /**
@@ -116,6 +309,7 @@
 
                     window.clearTimeout(timeoutId);
                     window.removeEventListener("message", handleMessage);
+
                     const result = event.data.result || {
                         ok: false,
                         reason: this.getString("customEditorUnknownBridgeResponse")
@@ -189,24 +383,22 @@
          */
         createElement() {
             const parsedDocument = new DOMParser().parseFromString(CustomEditor.TEMPLATE, "text/html"),
-                backdropElement = parsedDocument.body.firstElementChild;
+                dialogElement = parsedDocument.body.firstElementChild;
 
-            if (!(backdropElement instanceof HTMLElement)) {
+            if (!(dialogElement instanceof HTMLElement)) {
                 throw new Error(this.getString("customEditorCreateFailed"));
             }
 
-            const dialogElement = backdropElement.querySelector(".mrbr-cvm-custom-editor-dialog"),
-                titleElement = backdropElement.querySelector("[data-mrbr-cvm-custom-editor-title]"),
-                toolbarElement = backdropElement.querySelector("[data-mrbr-cvm-custom-editor-toolbar]"),
-                labelElement = backdropElement.querySelector("[data-mrbr-cvm-custom-editor-label]"),
-                textareaElement = backdropElement.querySelector("[data-mrbr-cvm-custom-editor-textarea]"),
-                statusElement = backdropElement.querySelector("[data-mrbr-cvm-custom-editor-status]"),
-                actionsElement = backdropElement.querySelector("[data-mrbr-cvm-custom-editor-actions]");
+            const titleElement = dialogElement.querySelector("[data-mrbr-cvm-custom-editor-title]"),
+                titlebarActionsElement = dialogElement.querySelector("[data-mrbr-cvm-custom-editor-titlebar-actions]"),
+                labelElement = dialogElement.querySelector("[data-mrbr-cvm-custom-editor-label]"),
+                textareaElement = dialogElement.querySelector("[data-mrbr-cvm-custom-editor-textarea]"),
+                statusElement = dialogElement.querySelector("[data-mrbr-cvm-custom-editor-status]"),
+                actionsElement = dialogElement.querySelector("[data-mrbr-cvm-custom-editor-actions]");
 
             if (
-                !(dialogElement instanceof HTMLElement)
-                || !(titleElement instanceof HTMLElement)
-                || !(toolbarElement instanceof HTMLElement)
+                !(titleElement instanceof HTMLElement)
+                || !(titlebarActionsElement instanceof HTMLElement)
                 || !(labelElement instanceof HTMLLabelElement)
                 || !(textareaElement instanceof HTMLTextAreaElement)
                 || !(statusElement instanceof HTMLElement)
@@ -217,16 +409,17 @@
 
             const dialogId = `mrbr-cvm-custom-editor-${crypto.randomUUID()}`,
                 textareaId = `${dialogId}-textarea`,
-                goButton = this.createIconButton({
-                    iconName: "go",
-                    title: this.getString("customEditorGoToPrompt"),
-                    onClick: () => this.focusComposer()
-                });
+                closeButton = this.createIconButton({
+                    iconName: "windowClose",
+                    title: this.getString("customEditorCloseDialog"),
+                    onClick: () => this.close()
+                }),
+                clearButton = this.createTextButton(this.getString("customEditorClear"), () => this.clearEditor());
 
-            this.expandButton = this.createIconButton({
-                iconName: "expandPanel",
-                title: this.getString("customEditorExpandDialog"),
-                onClick: () => this.toggleExpanded()
+            this.maximiseButton = this.createIconButton({
+                iconName: "windowMaximise",
+                title: this.getString("customEditorMaximiseDialog"),
+                onClick: () => this.toggleMaximised()
             });
 
             dialogElement.setAttribute("aria-labelledby", dialogId);
@@ -236,60 +429,91 @@
             labelElement.setAttribute("for", textareaId);
             textareaElement.id = textareaId;
             textareaElement.placeholder = this.getString("customEditorPromptPlaceholder");
+            textareaElement.value = this.draftText;
 
-            toolbarElement.append(goButton, this.expandButton);
+            titlebarActionsElement.append(this.maximiseButton, closeButton);
             actionsElement.append(
-                this.createTextButton(this.getString("cancel"), () => this.close()),
+                clearButton,
                 this.createTextButton(this.getString("customEditorSetPrompt"), () => this.setPrompt(false)),
                 this.createTextButton(this.getString("customEditorSetPromptAndSend"), () => this.setPrompt(true))
             );
 
-            backdropElement.addEventListener("click", event => {
-                if (event.target === backdropElement) {
-                    this.close();
-                }
+            textareaElement.addEventListener("input", () => {
+                this.draftText = textareaElement.value;
             });
+            dialogElement.addEventListener("keydown", event => this.handleKeyDown(event));
+            this.wireDragging(dialogElement);
+            this.wireResizing(dialogElement);
 
-            backdropElement.addEventListener("keydown", event => {
-                if (event.key === "Escape") {
-                    event.preventDefault();
-                    this.close();
-                }
-            });
-
-            this.backdropElement = backdropElement;
             this.dialogElement = dialogElement;
             this.textareaElement = textareaElement;
             this.statusElement = statusElement;
 
-            return backdropElement;
+            return dialogElement;
         }
 
         /**
          * @returns {Promise<void>}
          */
         async show() {
-            if (this.backdropElement?.isConnected) {
+            const wasDraftCleared = this.syncDraftToCurrentPage();
+
+            if (this.dialogElement?.isConnected) {
                 this.textareaElement?.focus();
+                if (wasDraftCleared) {
+                    this.flashEditableArea();
+                    this.setStatus(this.getString("customEditorClearedForPageChange"));
+                }
                 return;
             }
 
-            document.documentElement.append(this.createElement());
+            const dialogElement = this.createElement();
+
+            this.applyGeometry(await this.loadGeometry());
+            document.documentElement.append(dialogElement);
+            window.addEventListener("resize", this.boundWindowResize);
+            this.startPageKeyMonitor();
             this.textareaElement?.focus();
-            this.setStatus(this.getString("customEditorReady"));
+            if (wasDraftCleared) {
+                this.flashEditableArea();
+                this.setStatus(this.getString("customEditorClearedForPageChange"));
+            } else {
+                this.setStatus(this.getString("customEditorReady"));
+            }
         }
 
         /**
          * @returns {void}
          */
         close() {
-            this.backdropElement?.remove();
-            this.backdropElement = null;
+            if (this.textareaElement) {
+                this.draftText = this.textareaElement.value;
+            }
+
+            this.saveGeometry();
+            window.removeEventListener("resize", this.boundWindowResize);
+            this.stopPageKeyMonitor();
+            this.dialogElement?.remove();
             this.dialogElement = null;
             this.textareaElement = null;
             this.statusElement = null;
-            this.expandButton = null;
-            this.isExpanded = false;
+            this.maximiseButton = null;
+            this.isMaximised = false;
+        }
+
+        /**
+         * @returns {void}
+         */
+        clearEditor() {
+            this.draftText = "";
+
+            if (this.textareaElement) {
+                this.textareaElement.value = "";
+                this.textareaElement.focus();
+            }
+
+            this.flashEditableArea();
+            this.setStatus(this.getString("customEditorCleared"));
         }
 
         /**
@@ -315,6 +539,10 @@
                 return;
             }
 
+            this.syncDraftToCurrentPage();
+
+            const promptText = this.textareaElement.value;
+
             this.setBusy(true);
             this.setStatus(
                 clickSend
@@ -324,7 +552,7 @@
 
             try {
                 const result = await this.callMainWorld("setPromptText", {
-                    text: this.textareaElement.value,
+                    text: promptText,
                     clickSend
                 });
 
@@ -338,6 +566,7 @@
                     return;
                 }
 
+                this.clearEditorAfterSuccess();
                 this.setStatus(
                     clickSend
                         ? this.getString("customEditorPromptSetAndSent")
@@ -353,23 +582,232 @@
         /**
          * @returns {void}
          */
-        toggleExpanded() {
-            this.isExpanded = !this.isExpanded;
-            this.dialogElement?.classList.toggle("mrbr-cvm-custom-editor-dialog-expanded", this.isExpanded);
+        clearEditorAfterSuccess() {
+            this.draftText = "";
 
-            if (this.expandButton) {
-                this.expandButton.replaceChildren(
-                    window.MrbrCvm.ViewManagerIconButtonFactory
-                        ? new window.MrbrCvm.ViewManagerIconButtonFactory().createIconElement(
-                            this.isExpanded ? "collapsePanel" : "expandPanel"
-                        )
-                        : document.createTextNode(this.isExpanded ? "-" : "+")
-                );
-                this.expandButton.title = this.getString(
-                    this.isExpanded ? "customEditorCollapseDialog" : "customEditorExpandDialog"
-                );
-                this.expandButton.setAttribute("aria-label", this.expandButton.title);
+            if (this.textareaElement) {
+                this.textareaElement.value = "";
+                this.textareaElement.focus();
             }
+        }
+
+        /**
+         * @returns {void}
+         */
+        toggleMaximised() {
+            if (!this.dialogElement) {
+                return;
+            }
+
+            if (!this.isMaximised) {
+                this.restoreGeometry = this.geometry;
+                this.isMaximised = true;
+                this.dialogElement.classList.add("mrbr-cvm-custom-editor-window-maximised");
+                this.applyGeometry({
+                    left: CustomEditor.VIEWPORT_MARGIN,
+                    top: CustomEditor.VIEWPORT_MARGIN,
+                    width: window.innerWidth - (CustomEditor.VIEWPORT_MARGIN * 2),
+                    height: window.innerHeight - (CustomEditor.VIEWPORT_MARGIN * 2)
+                });
+            } else {
+                this.isMaximised = false;
+                this.dialogElement.classList.remove("mrbr-cvm-custom-editor-window-maximised");
+                this.applyGeometry(this.restoreGeometry || this.createDefaultGeometry());
+            }
+
+            this.updateMaximiseButton();
+        }
+
+        /**
+         * @returns {void}
+         */
+        updateMaximiseButton() {
+            if (!this.maximiseButton) {
+                return;
+            }
+
+            const iconFactory = window.MrbrCvm.ViewManagerIconButtonFactory
+                    ? new window.MrbrCvm.ViewManagerIconButtonFactory()
+                    : null,
+                iconName = this.isMaximised ? "windowRestore" : "windowMaximise",
+                title = this.getString(
+                    this.isMaximised ? "customEditorRestoreDialog" : "customEditorMaximiseDialog"
+                );
+
+            this.maximiseButton.replaceChildren(
+                iconFactory
+                    ? iconFactory.createIconElement(iconName)
+                    : document.createTextNode(this.isMaximised ? "-" : "+")
+            );
+            this.maximiseButton.title = title;
+            this.maximiseButton.setAttribute("aria-label", title);
+        }
+
+        /**
+         * @param {KeyboardEvent} event
+         * @returns {void}
+         */
+        handleKeyDown(event) {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                this.close();
+                return;
+            }
+
+            if (event.key !== "Enter" || event.altKey) {
+                return;
+            }
+
+            if (event.metaKey && !event.shiftKey) {
+                event.preventDefault();
+                this.setPrompt(true);
+                return;
+            }
+
+            if (event.ctrlKey && event.shiftKey) {
+                event.preventDefault();
+                this.setPrompt(false);
+                return;
+            }
+
+            if (event.ctrlKey) {
+                event.preventDefault();
+                this.setPrompt(true);
+            }
+        }
+
+        /**
+         * @param {HTMLElement} dialogElement
+         * @returns {void}
+         */
+        wireDragging(dialogElement) {
+            const handleElement = dialogElement.querySelector("[data-mrbr-cvm-custom-editor-drag-handle]");
+
+            if (!(handleElement instanceof HTMLElement)) {
+                return;
+            }
+
+            handleElement.addEventListener("pointerdown", event => {
+                if (
+                    !(event.target instanceof Node)
+                    || (event.target instanceof HTMLElement && event.target.closest("button"))
+                    || this.isMaximised
+                ) {
+                    return;
+                }
+
+                event.preventDefault();
+                this.isPointerInteractionActive = true;
+                handleElement.setPointerCapture(event.pointerId);
+
+                const startX = event.clientX,
+                    startY = event.clientY,
+                    startGeometry = this.geometry || this.createDefaultGeometry(),
+                    move = /** @param {PointerEvent} moveEvent */ moveEvent => {
+                        this.applyGeometry({
+                            ...startGeometry,
+                            left: startGeometry.left + moveEvent.clientX - startX,
+                            top: startGeometry.top + moveEvent.clientY - startY
+                        });
+                    },
+                    end = () => {
+                        this.isPointerInteractionActive = false;
+                        handleElement.removeEventListener("pointermove", move);
+                        handleElement.removeEventListener("pointerup", end);
+                        handleElement.removeEventListener("pointercancel", end);
+                        this.saveGeometry();
+                    };
+
+                handleElement.addEventListener("pointermove", move);
+                handleElement.addEventListener("pointerup", end);
+                handleElement.addEventListener("pointercancel", end);
+            });
+        }
+
+        /**
+         * @param {HTMLElement} dialogElement
+         * @returns {void}
+         */
+        wireResizing(dialogElement) {
+            dialogElement.querySelectorAll("[data-mrbr-cvm-custom-editor-resize]").forEach(handleElement => {
+                if (!(handleElement instanceof HTMLElement)) {
+                    return;
+                }
+
+                handleElement.addEventListener("pointerdown", event => {
+                    if (this.isMaximised) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    this.isPointerInteractionActive = true;
+                    handleElement.setPointerCapture(event.pointerId);
+
+                    const direction = handleElement.dataset.mrbrCvmCustomEditorResize || "",
+                        startX = event.clientX,
+                        startY = event.clientY,
+                        startGeometry = this.geometry || this.createDefaultGeometry(),
+                        move = /** @param {PointerEvent} moveEvent */ moveEvent => {
+                            const deltaX = moveEvent.clientX - startX,
+                                deltaY = moveEvent.clientY - startY,
+                                nextGeometry = {
+                                    ...startGeometry
+                                };
+
+                            if (direction.includes("e")) {
+                                nextGeometry.width = startGeometry.width + deltaX;
+                            }
+
+                            if (direction.includes("s")) {
+                                nextGeometry.height = startGeometry.height + deltaY;
+                            }
+
+                            if (direction.includes("w")) {
+                                nextGeometry.left = startGeometry.left + deltaX;
+                                nextGeometry.width = startGeometry.width - deltaX;
+                            }
+
+                            if (direction.includes("n")) {
+                                nextGeometry.top = startGeometry.top + deltaY;
+                                nextGeometry.height = startGeometry.height - deltaY;
+                            }
+
+                            this.applyGeometry(nextGeometry);
+                        },
+                        end = () => {
+                            this.isPointerInteractionActive = false;
+                            handleElement.removeEventListener("pointermove", move);
+                            handleElement.removeEventListener("pointerup", end);
+                            handleElement.removeEventListener("pointercancel", end);
+                            this.saveGeometry();
+                        };
+
+                    handleElement.addEventListener("pointermove", move);
+                    handleElement.addEventListener("pointerup", end);
+                    handleElement.addEventListener("pointercancel", end);
+                });
+            });
+        }
+
+        /**
+         * @returns {void}
+         */
+        handleWindowResize() {
+            if (!this.dialogElement || this.isPointerInteractionActive) {
+                return;
+            }
+
+            if (this.isMaximised) {
+                this.applyGeometry({
+                    left: CustomEditor.VIEWPORT_MARGIN,
+                    top: CustomEditor.VIEWPORT_MARGIN,
+                    width: window.innerWidth - (CustomEditor.VIEWPORT_MARGIN * 2),
+                    height: window.innerHeight - (CustomEditor.VIEWPORT_MARGIN * 2)
+                });
+                return;
+            }
+
+            this.applyGeometry(this.geometry || this.createDefaultGeometry());
         }
 
         /**
@@ -397,6 +835,24 @@
 
             this.statusElement.textContent = message;
             this.statusElement.classList.toggle("mrbr-cvm-custom-editor-status-error", isError);
+        }
+
+        /**
+         * @returns {void}
+         */
+        flashEditableArea() {
+            const textareaElement = this.textareaElement;
+
+            if (!textareaElement) {
+                return;
+            }
+
+            textareaElement.classList.remove("mrbr-cvm-custom-editor-textarea-cleared");
+            void textareaElement.offsetWidth;
+            textareaElement.classList.add("mrbr-cvm-custom-editor-textarea-cleared");
+            window.setTimeout(() => {
+                textareaElement.classList.remove("mrbr-cvm-custom-editor-textarea-cleared");
+            }, 900);
         }
     }
 
