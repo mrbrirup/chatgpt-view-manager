@@ -36,7 +36,9 @@
             this.onSetTheme = options.onSetTheme;
             this.getCurrentTheme = options.getCurrentTheme;
             this.rootElement = null;
+            this.toggleButton = null;
             this.menuElement = null;
+            this.positionAnimationFrameId = 0;
         }
 
         /**
@@ -46,7 +48,6 @@
          */
         createElement() {
             const
-                ViewManagerStrings = window.MrbrCvm?.ViewManagerStrings,
                 rootElement = document.createElement("div"),
                 toggleButton = this.createIconButton({
                     iconName: "more",
@@ -61,6 +62,9 @@
             rootElement.className = "mrbr-cvm-actions-dropdown";
             menuElement.className = "mrbr-cvm-actions-dropdown-menu";
             menuElement.hidden = true;
+            menuElement.setAttribute("role", "menu");
+            toggleButton.setAttribute("aria-haspopup", "menu");
+            toggleButton.setAttribute("aria-expanded", "false");
 
             menuElement.append(
                 this.createMenuButton(this.strings.get("exportData"), this.strings.get("exportViewManagerData"), () => {
@@ -86,13 +90,17 @@
                 }, () => this.getCurrentTheme() === "auto")
             );
 
-            rootElement.append(toggleButton, menuElement);
+            rootElement.append(toggleButton);
+            document.documentElement.append(menuElement);
 
             this.rootElement = rootElement;
+            this.toggleButton = toggleButton;
             this.menuElement = menuElement;
 
             document.addEventListener("click", this.handleDocumentClick, true);
             document.addEventListener("keydown", this.handleDocumentKeyDown, true);
+            document.addEventListener("scroll", this.handleViewportChange, true);
+            window.addEventListener("resize", this.handleViewportChange);
 
             return rootElement;
         }
@@ -147,8 +155,10 @@
          * @returns {void}
          */
         open() {
-            if (this.menuElement) {
+            if (this.menuElement && this.toggleButton) {
                 this.menuElement.hidden = false;
+                this.toggleButton.setAttribute("aria-expanded", "true");
+                this.schedulePosition();
             }
         }
 
@@ -158,8 +168,9 @@
          * @returns {void}
          */
         close() {
-            if (this.menuElement) {
+            if (this.menuElement && this.toggleButton) {
                 this.menuElement.hidden = true;
+                this.toggleButton.setAttribute("aria-expanded", "false");
             }
         }
 
@@ -173,7 +184,85 @@
                 return;
             }
 
-            this.menuElement.hidden = !this.menuElement.hidden;
+            if (this.menuElement.hidden) {
+                this.open();
+            } else {
+                this.close();
+            }
+        }
+
+        /**
+         * Positions the menu as a viewport overlay. The default anchor is:
+         * menu top-right to toggle button bottom-right. The final position is
+         * clamped into the viewport so a future draggable panel cannot push the
+         * menu off-screen.
+         *
+         * @returns {void}
+         */
+        positionMenu() {
+            const menuElement = this.menuElement,
+                toggleButton = this.toggleButton;
+
+            if (!menuElement || !toggleButton || menuElement.hidden) {
+                return;
+            }
+
+            if (!toggleButton.isConnected) {
+                this.close();
+                return;
+            }
+
+            const viewportPadding = 8,
+                gap = 4,
+                availableWidth = Math.max(160, window.innerWidth - (viewportPadding * 2)),
+                availableHeight = Math.max(120, window.innerHeight - (viewportPadding * 2));
+
+            menuElement.style.maxWidth = `${availableWidth}px`;
+            menuElement.style.maxHeight = `${availableHeight}px`;
+
+            const buttonRect = toggleButton.getBoundingClientRect(),
+                menuRect = menuElement.getBoundingClientRect(),
+                menuWidth = Math.min(menuRect.width, availableWidth),
+                menuHeight = Math.min(menuRect.height, availableHeight),
+                preferredLeft = buttonRect.right - menuWidth,
+                preferredTop = buttonRect.bottom + gap,
+                topWhenAbove = buttonRect.top - menuHeight - gap;
+
+            const left = Math.min(
+                Math.max(preferredLeft, viewportPadding),
+                Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
+            );
+
+            let top = preferredTop;
+
+            if (
+                preferredTop + menuHeight > window.innerHeight - viewportPadding
+                && topWhenAbove >= viewportPadding
+            ) {
+                top = topWhenAbove;
+            }
+
+            top = Math.min(
+                Math.max(top, viewportPadding),
+                Math.max(viewportPadding, window.innerHeight - menuHeight - viewportPadding)
+            );
+
+            menuElement.style.left = `${Math.round(left)}px`;
+            menuElement.style.top = `${Math.round(top)}px`;
+        }
+
+        /**
+         * @returns {void}
+         */
+        schedulePosition() {
+            if (this.positionAnimationFrameId) {
+                return;
+            }
+
+            this.positionAnimationFrameId = window.requestAnimationFrame(() => {
+                this.positionAnimationFrameId = 0;
+                this.positionMenu();
+            });
         }
 
         /**
@@ -187,7 +276,13 @@
                 return;
             }
 
-            if (event.target instanceof Node && this.rootElement.contains(event.target)) {
+            if (
+                event.target instanceof Node
+                && (
+                    this.rootElement.contains(event.target)
+                    || this.menuElement.contains(event.target)
+                )
+            ) {
                 return;
             }
 
@@ -207,6 +302,19 @@
         };
 
         /**
+         * Repositions the open menu when the viewport or a scroll container moves.
+         *
+         * @returns {void}
+         */
+        handleViewportChange = () => {
+            if (!this.menuElement || this.menuElement.hidden) {
+                return;
+            }
+
+            this.schedulePosition();
+        };
+
+        /**
          * Removes document listeners.
          *
          * @returns {void}
@@ -214,6 +322,13 @@
         dispose() {
             document.removeEventListener("click", this.handleDocumentClick, true);
             document.removeEventListener("keydown", this.handleDocumentKeyDown, true);
+            document.removeEventListener("scroll", this.handleViewportChange, true);
+            window.removeEventListener("resize", this.handleViewportChange);
+            window.cancelAnimationFrame(this.positionAnimationFrameId);
+            this.menuElement?.remove();
+            this.menuElement = null;
+            this.toggleButton = null;
+            this.rootElement = null;
         }
     }
 

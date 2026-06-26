@@ -524,11 +524,14 @@
 }
 
 .mrbr-cvm-actions-dropdown-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
-    z-index: calc(var(--mrbr-cvm-panel-z-index) + 1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: var(--mrbr-cvm-panel-z-index);
     min-width: 150px;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    overflow: auto;
     padding: 4px;
     border: 1px solid var(--mrbr-cvm-panel-border);
     border-radius: 6px;
