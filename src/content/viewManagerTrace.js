@@ -2,6 +2,48 @@
     "use strict";
 
     window.MrbrCvm = window.MrbrCvm || {};
+
+    /**
+     * Small page-visible switch for diagnostic trace logging. The content script
+     * runs in an isolated world, so localStorage and document attributes are the
+     * easiest toggles to reach from the page DevTools console.
+     */
+    class ViewManagerDebug {
+        static LOCAL_STORAGE_KEY = "mrbr-cvm-debug";
+        static DATA_ATTRIBUTE = "mrbrCvmDebug";
+
+        /**
+         * @param {unknown} value
+         * @returns {boolean}
+         */
+        static isTruthy(value) {
+            return value === true
+                || value === "true"
+                || value === "1"
+                || value === "yes"
+                || value === "on";
+        }
+
+        /**
+         * @returns {boolean}
+         */
+        static isTraceEnabled() {
+            if (ViewManagerDebug.isTruthy(window.MrbrCvm.debug)) {
+                return true;
+            }
+
+            if (ViewManagerDebug.isTruthy(document.documentElement.dataset[ViewManagerDebug.DATA_ATTRIBUTE])) {
+                return true;
+            }
+
+            try {
+                return ViewManagerDebug.isTruthy(window.localStorage.getItem(ViewManagerDebug.LOCAL_STORAGE_KEY));
+            } catch {
+                return false;
+            }
+        }
+    }
+
     /**
      * Buffers one user operation into a single console group.
      */
@@ -99,22 +141,24 @@
             this.isFlushed = true;
             window.clearTimeout(this.flushTimeoutId);
 
-            console.groupCollapsed(
-                `[MrbrCvm ${this.id}] ${this.action} — ${this.entries.length} trace entries`
-            );
-            console.info("Started:", this.startedUtc);
+            if (ViewManagerTrace.isEnabled()) {
+                console.groupCollapsed(
+                    `[MrbrCvm ${this.id}] ${this.action} — ${this.entries.length} trace entries`
+                );
+                console.info("Started:", this.startedUtc);
 
-            this.entries.forEach(entry => {
-                const prefix = `+${entry.elapsedMilliseconds}ms [${entry.category}] ${entry.message}`;
+                this.entries.forEach(entry => {
+                    const prefix = `+${entry.elapsedMilliseconds}ms [${entry.category}] ${entry.message}`;
 
-                if (entry.data === undefined) {
-                    console.log(prefix);
-                } else {
-                    console.log(prefix, entry.data);
-                }
-            });
+                    if (entry.data === undefined) {
+                        console.log(prefix);
+                    } else {
+                        console.log(prefix, entry.data);
+                    }
+                });
 
-            console.groupEnd();
+                console.groupEnd();
+            }
 
             const history = window.MrbrCvm.ViewManagerTrace?.history;
 
@@ -177,11 +221,22 @@
         static history = [];
 
         /**
+         * @returns {boolean}
+         */
+        static isEnabled() {
+            return ViewManagerDebug.isTraceEnabled();
+        }
+
+        /**
          * @param {string} action
          * @param {HTMLElement | null} target
-         * @returns {ViewManagerTraceOperation}
+         * @returns {ViewManagerTraceOperation | null}
          */
         static begin(action, target) {
+            if (!ViewManagerTrace.isEnabled()) {
+                return null;
+            }
+
             ViewManagerTrace.currentOperation?.flush();
 
             const operation = new ViewManagerTraceOperation(action, target);
@@ -194,7 +249,9 @@
          * @returns {ViewManagerTraceOperation | null}
          */
         static current() {
-            return ViewManagerTrace.currentOperation;
+            return ViewManagerTrace.isEnabled()
+                ? ViewManagerTrace.currentOperation
+                : null;
         }
 
         /**
@@ -204,6 +261,10 @@
          * @returns {void}
          */
         static publishHistory() {
+            if (!ViewManagerTrace.isEnabled()) {
+                return;
+            }
+
             let outputElement = document.getElementById(ViewManagerTrace.OUTPUT_ELEMENT_ID);
 
             if (!(outputElement instanceof HTMLScriptElement)) {
@@ -218,8 +279,36 @@
         }
     }
 
-    
+    window.MrbrCvm.ViewManagerDebug = ViewManagerDebug;
     window.MrbrCvm.ViewManagerTraceOperation = ViewManagerTraceOperation;
     window.MrbrCvm.ViewManagerTrace = ViewManagerTrace;
-    console.log("window.MrbrCvm", window.MrbrCvm)
 })();
+
+
+/*
+    Added ViewManagerDebug.
+    ViewManagerTrace.begin() now returns null unless debug tracing is enabled.
+    ViewManagerTrace.current() and publishHistory() are also gated.
+    Removed the noisy startup console.log("window.MrbrCvm", ...).
+    Full JS syntax check passed.
+
+    To enable tracing from ChatGPT DevTools, either of these should work:
+    ```js
+        localStorage.setItem("mrbr-cvm-debug", "true")
+    ```
+    or, without persistence:
+    ```js
+        document.documentElement.dataset.mrbrCvmDebug = "true"
+    ````
+    To disable again:
+    ```js
+        localStorage.removeItem("mrbr-cvm-debug")
+        delete document.documentElement.dataset.mrbrCvmDebug
+    ```
+    Trace extraction remains the same when enabled:
+    ```js
+        const traces = JSON.parse(document.querySelector("#mrbr-cvm-trace-output").textContent);
+        copy(JSON.stringify(traces.at(-1), null, 2));
+    111
+
+*/
