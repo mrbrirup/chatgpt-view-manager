@@ -591,6 +591,62 @@
     outline-offset: 2px;
 }
 
+.mrbr-cvm-custom-editor-dialog {
+    width: min(720px, calc(100vw - 32px));
+}
+
+.mrbr-cvm-custom-editor-dialog-expanded {
+    width: min(1100px, calc(100vw - 32px));
+}
+
+.mrbr-cvm-custom-editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.mrbr-cvm-custom-editor-header .mrbr-cvm-dialog-title {
+    margin-bottom: 0;
+}
+
+.mrbr-cvm-custom-editor-toolbar {
+    display: inline-flex;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+.mrbr-cvm-custom-editor-textarea {
+    min-height: 220px;
+    max-height: min(56vh, 640px);
+}
+
+.mrbr-cvm-custom-editor-dialog-expanded .mrbr-cvm-custom-editor-textarea {
+    min-height: min(62vh, 720px);
+}
+
+.mrbr-cvm-custom-editor-status {
+    min-height: 18px;
+    margin: -4px 0 10px;
+    color: var(--mrbr-cvm-panel-muted-foreground);
+    font-size: 12px;
+}
+
+.mrbr-cvm-custom-editor-status-error {
+    color: var(--mrbr-cvm-pending-bookmark-outline);
+}
+
+.mrbr-cvm-custom-editor-busy {
+    cursor: wait;
+}
+
+.mrbr-cvm-custom-editor-busy button:disabled,
+.mrbr-cvm-custom-editor-busy textarea:disabled {
+    cursor: wait;
+    opacity: 0.72;
+}
+
 .mrbr-cvm-compact-row-bookmark {
     grid-template-columns: auto auto auto auto minmax(0, 1fr);
 }

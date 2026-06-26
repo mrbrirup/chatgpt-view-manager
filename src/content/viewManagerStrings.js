@@ -66,6 +66,7 @@
             collapseAllBlocks: "Collapse all conversation blocks",
             expandAllBlocks: "Expand all conversation blocks",
             moreViewManagerActions: "More View Manager actions",
+            openCustomEditor: "Open Custom Editor",
 
             expandViewManager: "Expand View Manager",
             collapseViewManager: "Collapse View Manager",
@@ -170,6 +171,28 @@
 
             noMatchingBookmarks: "No matching bookmarks.",
             noMatchingCollapsedBlocks: "No matching collapsed blocks.",
+
+            customEditorTitle: "Custom Editor",
+            customEditorPromptLabel: "Prompt",
+            customEditorPromptPlaceholder: "Write prompt text to place into ChatGPT's composer.",
+            customEditorGoToPrompt: "Go to prompt composer",
+            customEditorExpandDialog: "Expand Custom Editor",
+            customEditorCollapseDialog: "Collapse Custom Editor",
+            customEditorSetPrompt: "Set prompt",
+            customEditorSetPromptAndSend: "Set prompt and send",
+            customEditorReady: "Ready.",
+            customEditorPromptFocused: "Prompt composer focused.",
+            customEditorSettingPrompt: "Setting prompt...",
+            customEditorSettingPromptAndSending: "Setting prompt and looking for send button...",
+            customEditorPromptSet: "Prompt set.",
+            customEditorPromptSetAndSent: "Prompt set and sent.",
+            customEditorPromptSetButSendNotClicked: "Prompt was set, but the send button was not found or was disabled after render.",
+            customEditorPromptNotFound: "Prompt composer not found.",
+            customEditorPromptUpdateFailed: "Prompt update failed.",
+            customEditorBridgeLoadFailed: "Custom Editor MAIN-world bridge failed to load.",
+            customEditorBridgeTimedOut: "Custom Editor MAIN-world bridge timed out.",
+            customEditorUnknownBridgeResponse: "Custom Editor received an unknown bridge response.",
+            customEditorCreateFailed: "Custom Editor dialog could not be created.",
 
         };
     }

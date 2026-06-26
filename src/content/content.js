@@ -221,6 +221,7 @@
     const ViewManagerLocalPersistence = window.MrbrCvm?.ViewManagerLocalPersistence;
     const ViewManagerImportExport = window.MrbrCvm?.ViewManagerImportExport;
     const ViewManagerNotesManager = window.MrbrCvm?.ViewManagerNotesManager;
+    const CustomEditor = window.MrbrCvm?.CustomEditor;
 
     if (!CollapsedBlocksManager) {
         throw new Error("ChatGPT View Manager failed to load CollapsedBlocksManager.");
@@ -240,6 +241,10 @@
 
     if (!ViewManagerNotesManager) {
         throw new Error("ChatGPT View Manager failed to load ViewManagerNotesManager.");
+    }
+
+    if (!CustomEditor) {
+        throw new Error("ChatGPT View Manager failed to load CustomEditor.");
     }
 
 
@@ -325,6 +330,8 @@
         notesManager = null;
         /** @type {InstanceType<typeof ViewManagerImportExport> | null} */
         importExport = null;
+        /** @type {InstanceType<typeof CustomEditor> | null} */
+        customEditor = null;
         /** @type {InstanceType<typeof CollapsedBlocksManager> | null} */
         collapsedBlocksManager = null;
         /** @type {InstanceType<typeof HoverToolbar> | null} */
@@ -1547,6 +1554,13 @@
                         this.scrollChatRootToBottom();
                     }
                 }),
+                customEditorButton = this.createIconButton({
+                    iconName: "edit",
+                    title: this.getString("openCustomEditor"),
+                    onClick: () => {
+                        this.openCustomEditor();
+                    }
+                }),
                 collapseAllButton = this.createIconButton({
                     iconName: "collapseAll",
                     title: this.getString("collapseAllBlocks"),
@@ -1569,6 +1583,7 @@
             leftToolbarElement.append(
                 topButton,
                 bottomButton,
+                customEditorButton,
                 collapseAllButton,
                 expandAllButton
             );
@@ -1602,6 +1617,24 @@
             this.applyToolbarBusyState(toolbarElement);
 
             return toolbarElement;
+        }
+
+        /**
+         * Opens the minimum viable Custom Editor dialog.
+         *
+         * @returns {void}
+         */
+        openCustomEditor() {
+            if (!this.customEditor) {
+                this.customEditor = new CustomEditor({
+                    createIconButton: options => this.createIconButton(options),
+                    strings: {
+                        get: key => this.getString(key)
+                    }
+                });
+            }
+
+            this.customEditor.show();
         }
 
         /**
