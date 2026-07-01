@@ -373,16 +373,7 @@ The exported JSON file may contain bookmark titles and notes written by the user
 
 ## License
 
-No license has been selected yet.
-
-Before publishing publicly, add a license file such as:
-
-* MIT
-* Apache-2.0
-* GPL-3.0
-* Proprietary / All rights reserved
-
-Choose the licence based on how open you want the project to be.
+MIT License. See [LICENCE](LICENSE).
 
 ---
 
@@ -391,3 +382,5 @@ Choose the licence based on how open you want the project to be.
 ChatGPT View Manager depends on ChatGPT page structure and DOM attributes that may change over time. Updates to ChatGPT may require updates to the extension.
 
 This project is independent and is not affiliated with OpenAI.
+
+---
