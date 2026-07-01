@@ -381,6 +381,14 @@ MIT License. See [LICENCE](LICENSE).
 
 ChatGPT View Manager depends on ChatGPT page structure and DOM attributes that may change over time. Updates to ChatGPT may require updates to the extension.
 
-This project is independent and is not affiliated with OpenAI.
+This extension is not affiliated with OpenAI. It depends on ChatGPT DOM behaviour and may stop working when ChatGPT changes. Use at your own risk.
 
 ---
+
+## Support and Maintenance
+
+This project is shared as-is under the MIT License.
+
+It was built primarily as a personal tool for managing long ChatGPT conversations. It depends on ChatGPT’s webpage structure, which may change without notice and may break the extension.
+
+I do not provide any guarantee of support, maintenance, compatibility, or timely fixes. I may update the project when I need it for my own use, and others are welcome to fork or adapt it.
