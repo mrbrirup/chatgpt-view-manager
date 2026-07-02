@@ -6,7 +6,7 @@ This extension is not affiliated with OpenAI.
 
 ## Data Access
 
-The extension runs on `https://chat.openai.com/*`.
+The extension runs on `https://chatgpt.com/*`.
 
 It can read and modify the ChatGPT webpage DOM in order to provide features such as:
 
@@ -39,7 +39,7 @@ This data remains on your device unless you export it or otherwise share your br
 
 The Custom Prompt Dialog can set text in the ChatGPT prompt composer.
 
-The dialog does not read or copy existing text from ChatGPT’s prompt composer into the extension.
+The dialog does not read or copy existing text from ChatGPT's prompt composer into the extension.
 
 Draft text in the Custom Prompt Dialog is kept only for the current tab/page lifetime and is not persisted across browser sessions.
 
@@ -62,7 +62,7 @@ The extension only runs on ChatGPT pages and interacts with the webpage already 
 You can remove stored extension data by:
 
 1. Removing the extension from Chrome; or
-2. Clearing the extension’s site/storage data from Chrome; or
+2. Clearing the extension's site/storage data from Chrome; or
 3. Using Chrome extension storage clearing tools.
 
 If import/export data has been saved to files, delete those files separately.

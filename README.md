@@ -1,239 +1,139 @@
 # ChatGPT View Manager
 
-A Chrome extension for navigating long ChatGPT conversations.
+A local Chrome extension for navigating, annotating, collapsing, and managing long ChatGPT conversations.
 
-ChatGPT View Manager adds a compact floating panel to ChatGPT pages, allowing you to bookmark useful conversation turns, navigate back to them quickly, add notes, filter saved items, and export/import your saved View Manager data.
+![View Manager panel open](./docs/images/ViewManagerPanelOpen.png)
 
-The project was created to solve a practical problem: long ChatGPT conversations become difficult to navigate, review, and manage. As conversations grow, finding an earlier prompt, response, decision, or code block can become slow and frustrating. This extension provides a lightweight local navigation layer on top of the ChatGPT page.
+ChatGPT View Manager adds a floating panel and contextual hover controls to ChatGPT pages. It is intended for people who work in long ChatGPT conversations and need a lightweight way to find important turns, collapse noisy sections, keep notes, and prepare prompts.
 
-> This project is independent and is not affiliated with OpenAI.
+This project is independent and is not affiliated with OpenAI.
 
----
+## Status
 
-## Current Status
+This project is shared as an MVP/personal-use tool. It is usable, but it depends on ChatGPT's webpage structure, which may change without notice and may break the extension.
 
-This project is currently in MVP development.
-
-The current extension focuses on:
-
-* Bookmarking conversation turns
-* Collapsing and restoring conversation turns
-* Reliable navigation to bookmarked turns
-* Bookmark and block notes
-* Filtering bookmarks
-* Local persistence per ChatGPT conversation
-* Import/export of saved View Manager data
-* Light, dark, and auto themes
-
----
+The extension is not published in the Chrome Web Store. It is installed as an unpacked extension from source.
 
 ## Features
 
-### Floating View Manager Panel
+- Floating View Manager panel
+- Conversation turn bookmarks
+- Collapsed conversation blocks
+- Collapsed block information bars
+- Per-block notes
+- Contextual Hover Toolbar
+- Custom Prompt Dialog
+- Filter/search for bookmarks and collapsed blocks
+- Collapse All and Expand All controls
+- Go to top / go to bottom navigation
+- Light and dark themes
+- Import/export of local View Manager data
+- Local Chrome storage persistence
 
-The extension adds a compact floating panel to ChatGPT pages.
+## Screenshots
 
-The panel includes:
+### View Manager panel
 
-* Top and bottom conversation navigation
-* Collapse All and Expand All frame-batched controls
-* Search/filter box
-* Theme/export/import menu
-* Collapsible panel mode
-
-Bookmark, note, collapse, and restore actions are provided by the contextual
-Hover Toolbar on each conversation block.
-
-Collapse All and Expand All cache the current block snapshot and process it over
-time-budgeted animation frames. The panel toolbar remains disabled until the
-batch and its single persistence update complete.
-
-### Conversation Bookmarks
-
-You can bookmark the currently visible ChatGPT conversation block.
-
-Each bookmark can store:
-
-* Title
-* Notes
-* ChatGPT turn identity
-* View Manager block identity
-* Content hash fallback
-* Role/index fallback
-* Created/updated timestamps
-
-Bookmarks are scoped to the current ChatGPT conversation.
-
-### Bookmark Navigation
-
-Bookmark navigation is designed to work with ChatGPT’s virtualised conversation layout.
-
-The extension attempts to locate bookmarks using:
-
-1. ChatGPT turn ID
-2. View Manager block key
-3. Content hash
-4. Role/index fallback
-
-Navigation uses the ChatGPT scroll container and includes retry logic for long or lazily-loaded conversations.
-
-### Bookmark Notes
-
-Bookmarks can be edited after creation.
-
-You can update:
-
-* Bookmark title
-* Bookmark notes
-
-Bookmark notes are included in filtering and export/import data.
+![View Manager panel](./docs/images/ViewManagerPanelOpen.png)
 
 ### Hover Toolbar
 
-Hovering a conversation block shows a contextual toolbar for:
+![Hover Toolbar](./docs/images/HoverMenu.png)
 
-* Collapse or restore
-* Add or remove bookmark
-* Add, edit, or delete notes
-* Minimise or expand the toolbar
+### Collapsed block information bar
 
-The toolbar owns hover interaction and presentation state. Feature operations are
-provided through callbacks so it does not directly own persistence.
+![Collapsed block information bar](./docs/images/CollapsedBlockUserInfobar.png)
 
-### Collapsed Block Information Bar
+### Custom Prompt Dialog
 
-A collapsed block displays a compact, non-interactive information bar showing:
+![Custom Prompt Dialog](./docs/images/CustomPromptDialog.png)
 
-* That the block is collapsed
-* Whether it has a note
-* Its saved title
+### Actions dropdown
 
-Collapse, restore, bookmark, and note actions remain in the Hover Toolbar.
+![Actions dropdown](./docs/images/ActionsDropDown.png)
 
-### Filtering
+More screenshots and usage notes are available in the [User Guide](./USER_GUIDE.md).
 
-The View Manager panel includes a compact filter box.
+## Installation
 
-Filtering searches bookmark data including:
+See [INSTALL.MD](./INSTALL.MD) for unpacked Chrome extension installation instructions.
 
-* Title
-* Notes
-* Role
-* Block key
-* Content hash
-* Block index
+Short version:
 
-Filtering is runtime-only and does not change saved data.
-
-### Themes
-
-The extension supports:
-
-* Auto theme
-* Light theme
-* Dark theme
-
-Theme selection is persisted globally.
-
-### Import and Export
-
-Saved View Manager state can be exported to JSON and imported later.
-
-Exported data includes:
-
-* Storage version
-* Global UI state
-* Conversation-scoped bookmarks
-* Bookmark notes
-* Conversation keys
-
-This allows backup, transfer, and manual inspection of saved View Manager data.
-
----
-
-## MVP Scope
-
-Included in the current feature set:
-
-* Floating View Manager panel
-* Conversation block detection
-* Bookmark creation
-* Bookmark editing
-* Bookmark notes
-* Collapsing and restoring blocks
-* Contextual Hover Toolbar
-* Collapsed-block Information Bar
-* Bookmark navigation
-* Bookmark filtering
-* Theme switching
-* Import/export
-* Conversation-scoped state
-* Local Chrome storage persistence
-
----
-
-## Installation for Local Development
-
-1. Clone or download this repository.
-
-2. Open Chrome and go to:
-
-   ```text
-   chrome://extensions/
-   ```
-
+1. Download or clone this repository.
+2. Open Chrome and go to `chrome://extensions/`.
 3. Enable **Developer mode**.
-
 4. Click **Load unpacked**.
+5. Select the repository folder containing `manifest.json`.
+6. Open or refresh `https://chatgpt.com/`.
 
-5. Select the extension project folder.
+## User Guide
 
-6. Open or refresh ChatGPT.
+See [USER_GUIDE.md](./USER_GUIDE.md) for screenshots and feature walkthroughs.
 
-7. The View Manager panel should appear on supported ChatGPT conversation pages.
+The guide covers:
 
----
+- View Manager panel
+- Toolbar controls
+- Bookmarks
+- Collapsed blocks
+- Hover Toolbar
+- Notes dialog
+- Custom Prompt Dialog
+- Filtering
+- Themes
+- Import/export
 
-## Expected Project Structure
+## Privacy
 
-```text
-chatgpt-view-manager/
-  manifest.json
-  src/
-    content/
-      content.js
-      content.css
-      hoverToolbar.js
-      hoverToolbar.css
-      informationBar.js
-      informationBar.css
-      conversationScanner.js
-      collapsedBlocksManager.js
-      collapsedBlocksManager.css
-      viewManagerActionsDropdown.js
-      viewManagerIconButtonFactory.js
-      viewManagerIcons.js
-      viewManagerStrings.js
-  types/
-    chrome-extension-globals.d.ts
-  README.md
-```
+See [PRIVACY.md](./PRIVACY.md).
 
----
+In short:
 
-## Technical Notes
+- Data is stored locally using Chrome extension storage.
+- The extension does not send data to a server controlled by this project.
+- Exported JSON files may contain bookmark titles, notes, collapsed block records, and UI state.
+- The extension runs on ChatGPT pages and can read/modify the page DOM to provide its features.
 
-### Browser
+## Support and Maintenance
 
-The extension is currently developed and tested in Chrome.
+This project is shared as-is under the MIT License.
 
-### Manifest
+It was built primarily as a personal tool for managing long ChatGPT conversations. It depends on ChatGPT's webpage structure, which may change without notice and may break the extension.
 
-The extension uses Chrome Extension Manifest V3.
+I do not provide any guarantee of support, maintenance, compatibility, or timely fixes. I may update the project when I need it for my own use, and others are welcome to fork or adapt it.
 
-### Storage
+## How it works
 
-State is stored using Chrome local extension storage.
+ChatGPT View Manager is a Manifest V3 Chrome extension.
+
+The extension injects content scripts into `https://chatgpt.com/*` and adds local UI on top of the ChatGPT page.
+
+Most functionality lives in `src/content/`:
+
+- `content.js` coordinates the main View Manager panel.
+- `conversationScanner.js` detects ChatGPT conversation blocks.
+- `hoverToolbar.js` manages the contextual hover controls.
+- `collapsedBlocksManager.js` manages collapsed block state and UI.
+- `informationBar.js` renders collapsed-block information bars.
+- `viewManagerNotesManager.js` manages block and bookmark notes.
+- `customEditor.js` renders the Custom Prompt Dialog.
+- `viewManagerLocalPersistence.js` manages Chrome local storage.
+
+The Custom Prompt Dialog uses a small page-world bridge in `src/page/customEditorMainWorldBridge.js` because ChatGPT's composer belongs to the webpage's JavaScript context.
+
+## Storage
+
+State is stored locally using `chrome.storage.local`.
+
+Stored data may include:
+
+- bookmark titles;
+- bookmark notes;
+- collapsed block records;
+- block notes;
+- conversation/page identifiers;
+- UI settings such as theme, panel state, and dialog size/position.
 
 The main storage key is:
 
@@ -241,154 +141,63 @@ The main storage key is:
 mrbrChatGptViewManagerState
 ```
 
-The storage model separates:
+## Import and export
 
-* Global UI state
-* Conversation-specific bookmark state
+The extension can export local View Manager data to JSON and import it later.
 
-### Conversation Identity
+Exported files may contain user-written titles and notes. Treat exported files as personal data if they contain sensitive information.
 
-The extension uses the current ChatGPT URL as the conversation key.
+## Development
 
-For individual conversation turns, the extension prefers ChatGPT’s turn ID when available.
+The project intentionally has no build step.
 
-Fallback identity fields are retained because ChatGPT’s DOM can change during page refresh, lazy loading, or response regeneration.
+Development style:
 
-### Scrolling and Virtualisation
+- vanilla JavaScript;
+- JSDoc typing;
+- class-based UI components;
+- CSS custom properties;
+- Manifest V3 APIs;
+- local Chrome extension storage;
+- `requestAnimationFrame` for batched DOM updates.
 
-ChatGPT uses a large virtualised thread layout. Some turns may not be fully hydrated until scrolled into view.
+Useful checks:
 
-Bookmark navigation therefore uses:
+```powershell
+Get-ChildItem -Path src -Recurse -Filter *.js | ForEach-Object { node --check $_.FullName }
+```
 
-* The ChatGPT scroll root
-* Turn container targeting
-* Header offset correction
-* Scroll position verification
-* Automatic retries
-* Delayed rescans after scroll/hydration
+```powershell
+node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync('manifest.json','utf8')); const files=[...m.content_scripts.flatMap(s=>[...(s.js||[]),...(s.css||[])]), ...m.web_accessible_resources.flatMap(r=>r.resources||[])]; const missing=files.filter(f=>!fs.existsSync(f)); if(missing.length){ console.error(missing.join('\n')); process.exit(1);} console.log('manifest assets ok')"
+```
 
-This is intended to make bookmark navigation more reliable in long conversations.
+## Known limitations
 
----
+- ChatGPT's DOM structure may change without notice.
+- Some features depend on ChatGPT's virtualised conversation rendering.
+- Long conversations can still produce scroll jitter.
+- Collapse All may occasionally need to be run more than once if ChatGPT moves or rehydrates DOM nodes.
+- The extension is currently focused on Chrome.
+- It is not packaged for Chrome Web Store distribution.
+- It is provided as an unpacked source extension.
 
-## Known Limitations
+## Repository notes
 
-* ChatGPT’s DOM structure may change without notice.
-* Long conversations can still produce visible scroll jitter.
-* Navigation reliability depends on ChatGPT’s current virtualised rendering behaviour.
-* The extension is currently focused on Chrome.
-* Import currently replaces saved View Manager state rather than merging it.
-* Filter text is not currently persisted.
-* The extension has not yet been packaged for Chrome Web Store distribution.
+Public-facing docs:
 
----
+- [INSTALL.MD](./INSTALL.MD)
+- [USER_GUIDE.md](./USER_GUIDE.md)
+- [PRIVACY.md](./PRIVACY.md)
+- [LICENSE](./LICENSE)
 
-## Development Priorities
-
-Current priorities:
-
-* Stabilise bookmark navigation
-* Keep the MVP small and reliable
-* Stabilise collapsed-block behaviour
-* Maintain clean vanilla JavaScript
-* Keep DOM updates scheduled and controlled
-* Avoid unnecessary work during ChatGPT DOM mutations
-
-Later priorities may include:
-
-* Better performance handling for very long conversations
-* Optional persisted filters
-* Per-conversation panel settings
-* Import merge support
-* Export selected conversation only
-* Keyboard shortcuts
-* More formal accessibility pass
-* Chrome i18n support
-* Test checklist automation where practical
-
----
-
-## Development Style
-
-This project currently uses:
-
-* Vanilla JavaScript
-* JSDoc typing
-* Small content-side helper classes
-* Class-based OOP and encapsulation as the preferred design style
-* Dedicated UI classes for contextual interaction and state-only information
-* No build step
-* CSS custom properties
-* Chrome extension APIs
-* `requestAnimationFrame` for DOM update scheduling
-* Debounced mutation handling
-
-The code is intentionally kept close to browser APIs to make the extension easy to inspect, debug, and modify.
-
----
-
-## Safety and Privacy
-
-ChatGPT View Manager stores its data locally using Chrome extension storage.
-
-The extension does not require a server for the MVP.
-
-The exported JSON file may contain bookmark titles and notes written by the user. Treat exported files as personal data if they contain sensitive information.
-
----
-
-## Roadmap
-
-### MVP
-
-* [x] Floating View Manager panel
-* [x] Conversation block detection
-* [x] Bookmark creation
-* [x] Bookmark editing
-* [x] Bookmark notes
-* [x] Bookmark filtering
-* [x] Theme switching
-* [x] Import/export
-* [x] Conversation-scoped state
-* [x] Turn-ID-based bookmark navigation
-* [x] Header-aware scroll positioning
-* [x] Verified scroll retry logic
-* [ ] MVP testing pass
-* [ ] README final review
-* [ ] First GitHub commit/tag
-
-### Later Milestones
-
-* [x] Hover Toolbar and collapsed Information Bar split
-* [ ] Feature flag support
-* [ ] Performance pass for long conversations
-* [ ] Storage migration hardening
-* [ ] Import merge workflow
-* [ ] Accessibility review
-* [ ] Keyboard shortcuts
-* [ ] Chrome i18n support
-* [ ] Chrome Web Store packaging review
-
----
+Development notes and planning documents are in `documents/`.
 
 ## License
 
-MIT License. See [LICENCE](LICENSE).
-
----
+MIT License. See [LICENSE](./LICENSE).
 
 ## Disclaimer
 
-ChatGPT View Manager depends on ChatGPT page structure and DOM attributes that may change over time. Updates to ChatGPT may require updates to the extension.
+This extension is not affiliated with OpenAI.
 
-This extension is not affiliated with OpenAI. It depends on ChatGPT DOM behaviour and may stop working when ChatGPT changes. Use at your own risk.
-
----
-
-## Support and Maintenance
-
-This project is shared as-is under the MIT License.
-
-It was built primarily as a personal tool for managing long ChatGPT conversations. It depends on ChatGPT’s webpage structure, which may change without notice and may break the extension.
-
-I do not provide any guarantee of support, maintenance, compatibility, or timely fixes. I may update the project when I need it for my own use, and others are welcome to fork or adapt it.
+ChatGPT View Manager depends on ChatGPT page structure and DOM behaviour. It may stop working when ChatGPT changes. Use at your own risk.

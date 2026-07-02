@@ -10,4 +10,4 @@ This is an unpacked Chrome extension. To install it, follow the steps below.
 - Select the folder containing your extension files (which must include a `manifest.json` file) and click "Select Folder" (or "Open" on Mac).
 
 If the extension is loaded successfully, you should see it listed on the extensions page. You can now use the extension in your Chrome browser.
-Navigate to the ChatGPT website, https://chat.openai.com/, and you should see the extension's features available for use.
+Navigate to the ChatGPT website, https://chatgpt.com/, and you should see the extension's features available for use.
